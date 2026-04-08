@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, cast
+
+from django.apps import apps as django_apps
+from django.conf import settings as django_settings
 from django.contrib import admin
 from django.contrib.admin import ModelAdmin
 from django.http import Http404, HttpResponseForbidden
 from django.shortcuts import redirect, render
 from django.urls import path
-from django.utils.safestring import mark_safe
+from django.utils.safestring import SafeString, mark_safe
 
 from ._ansi import ansi_to_html as _convert_ansi
 from .admin_compat import get_template, is_unfold_installed
@@ -14,8 +18,11 @@ from .models import CommandExecution
 from .registry import _registry, has_permission
 from .runners import get_runner
 
+if TYPE_CHECKING:
+    from django.db import models as _models
 
-def _ansi_to_html(text: str) -> str:
+
+def _ansi_to_html(text: str) -> SafeString:
     """Wrap ANSI-coded *text* in a themed ``<pre>`` block.
 
     ANSI escape sequences are converted to ``<span>`` elements with CSS
@@ -23,7 +30,7 @@ def _ansi_to_html(text: str) -> str:
     codes, inline ``style`` attributes.  Plain text passes through HTML-escaped.
     Theming (dark / light) is handled by ``ansi-output.css``.
     """
-    return mark_safe(f'<pre class="ansi-output">{_convert_ansi(text)}</pre>')
+    return cast(SafeString, mark_safe(f'<pre class="ansi-output">{_convert_ansi(text)}</pre>'))
 
 
 # ---------------------------------------------------------------------------
@@ -44,6 +51,8 @@ class CommandRunnerModelAdminMixin:
             ...
     """
 
+    model: type[_models.Model]  # provided by the ModelAdmin subclass
+
     def changelist_view(self, request, extra_context=None):
         attached = [
             entry
@@ -52,7 +61,7 @@ class CommandRunnerModelAdminMixin:
         ]
         extra_context = extra_context or {}
         extra_context["admin_runner_commands"] = attached
-        return super().changelist_view(request, extra_context=extra_context)
+        return super().changelist_view(request, extra_context=extra_context)  # type: ignore[misc]
 
 
 # ---------------------------------------------------------------------------
@@ -84,12 +93,14 @@ class CommandExecutionAdmin(ModelAdmin):
     ordering = ["-created_at"]
 
     @admin.display(description="Standard output")
-    def stdout_display(self, obj: CommandExecution) -> str:
-        return _ansi_to_html(obj.stdout) if obj.stdout else mark_safe("<em>—</em>")
+    def stdout_display(self, obj: CommandExecution) -> SafeString:
+        stdout = str(obj.stdout)
+        return _ansi_to_html(stdout) if stdout else cast(SafeString, mark_safe("<em>—</em>"))
 
     @admin.display(description="Standard error / traceback")
-    def stderr_display(self, obj: CommandExecution) -> str:
-        return _ansi_to_html(obj.stderr) if obj.stderr else mark_safe("<em>—</em>")
+    def stderr_display(self, obj: CommandExecution) -> SafeString:
+        stderr = str(obj.stderr)
+        return _ansi_to_html(stderr) if stderr else cast(SafeString, mark_safe("<em>—</em>"))
 
     def has_add_permission(self, request):
         return False
@@ -126,10 +137,16 @@ class CommandExecutionAdmin(ModelAdmin):
         for entry in sorted(visible, key=lambda e: (e["group"], e["name"])):
             grouped.setdefault(entry["group"], []).append(entry)
 
+        has_celery_beat = (
+            django_apps.is_installed("django_celery_beat")
+            and getattr(django_settings, "ADMIN_RUNNER_BACKEND", "django") == "celery"
+        )
+
         context = {
             **self.admin_site.each_context(request),
             "title": "Run Management Commands",
             "grouped_commands": grouped,
+            "has_celery_beat": has_celery_beat,
             "opts": self.model._meta,
         }
         return render(request, get_template("list"), context)
@@ -140,7 +157,7 @@ class CommandExecutionAdmin(ModelAdmin):
 
         entry = _registry[command_name]
         if not has_permission(request.user, entry):
-            return HttpResponseForbidden("You do not have permission to run this command.")
+            return HttpResponseForbidden(b"You do not have permission to run this command.")
 
         FormClass = form_from_command(command_name)
 

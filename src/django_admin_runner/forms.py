@@ -35,7 +35,7 @@ def _hidden_aware_argparse():
     def patched(self, *args, **kwargs):
         hidden = kwargs.pop("hidden", False)
         action = original(self, *args, **kwargs)
-        action.hidden = hidden
+        setattr(action, "hidden", hidden)
         return action
 
     argparse._ActionsContainer.add_argument = patched  # noqa: SLF001

@@ -1,0 +1,7 @@
+{
+  "pythonVersion": "3.12",
+  "typeCheckingMode": "basic",
+  "reportAttributeAccessIssue": "none",
+  "reportAssignmentType": "none",
+  "reportCallIssue": "none"
+}

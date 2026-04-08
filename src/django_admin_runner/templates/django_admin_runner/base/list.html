@@ -14,16 +14,37 @@
 <div id="content-main">
   {% if grouped_commands %}
     {% for group_name, commands in grouped_commands.items %}
-    <h2>{{ group_name }}</h2>
-    <ul class="object-tools" style="margin-bottom: 1em;">
-      {% for cmd in commands %}
-      <li>
-        <a href="{% url 'admin:django_admin_runner_command_run' cmd.name %}">
-          {{ cmd.name }}
-        </a>
-      </li>
-      {% endfor %}
-    </ul>
+    <div class="module" style="margin-bottom: 1.5em;">
+      <h2 style="padding: 0.5em 1em; margin: 0; background: var(--darkened-bg, #f8f8f8);">{{ group_name }}</h2>
+      <table class="results" style="width: 100%;">
+        <thead>
+          <tr>
+            <th scope="col">{% trans "Command" %}</th>
+            <th scope="col">{% trans "Description" %}</th>
+            <th scope="col"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for cmd in commands %}
+          <tr class="{% cycle 'row1' 'row2' %}">
+            <td><strong>{{ cmd.name }}</strong></td>
+            <td style="color: var(--body-quiet-color, #666);">{{ cmd.command_class.help|default:"" }}</td>
+            <td style="text-align: right; white-space: nowrap;">
+              <a href="{% url 'admin:django_admin_runner_command_run' cmd.name %}" class="button">
+                {% trans "Run" %}
+              </a>
+              {% if has_celery_beat %}
+              <a href="{% url 'admin:django_celery_beat_periodictask_add' %}?task=django_admin_runner.schedule_command"
+                 class="button" style="margin-left: 0.5em;">
+                {% trans "Schedule" %}
+              </a>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
     {% endfor %}
   {% else %}
     <p>{% trans "No commands registered." %}</p>

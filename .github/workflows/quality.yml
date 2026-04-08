@@ -13,7 +13,7 @@ jobs:
         with:
           python-version: "3.13"
 
-      - run: uv sync --group dev --group test
+      - run: uv sync --group dev --group test --all-extras
 
       - run: uv run ruff format --check src tests
 
