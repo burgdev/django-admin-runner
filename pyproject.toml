@@ -5,7 +5,7 @@ description = "Run Django management commands from the admin with auto-generated
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.12"
-dependencies = ["django>=6.0"]
+dependencies = ["django>=6.0", "ansi2html>=1.9"]
 
 classifiers = [
   "Development Status :: 4 - Beta",
@@ -21,6 +21,7 @@ classifiers = [
 [project.optional-dependencies]
 celery = ["celery>=5.3"]
 unfold = ["django-unfold>=0.40"]
+rich = ["rich>=13.0"]
 
 [project.urls]
 Homepage = "https://github.com/burgdev/django-admin-runner"

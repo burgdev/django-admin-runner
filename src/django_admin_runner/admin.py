@@ -5,12 +5,34 @@ from django.contrib.admin import ModelAdmin
 from django.http import Http404, HttpResponseForbidden
 from django.shortcuts import redirect, render
 from django.urls import path
+from django.utils.safestring import mark_safe
 
 from .admin_compat import get_template, is_unfold_installed
 from .forms import form_from_command
 from .models import CommandExecution
 from .registry import _registry, has_permission
 from .runners import get_runner
+
+_PRE_STYLE = (
+    "background:#1e1e1e;color:#d4d4d4;padding:1em;border-radius:4px;"
+    "overflow:auto;max-height:500px;font-size:0.8rem;line-height:1.5;"
+    "white-space:pre;font-family:monospace;"
+)
+
+
+def _ansi_to_html(text: str) -> str:
+    """Convert ANSI-coded text to a styled ``<pre>`` block.
+
+    Uses ``ansi2html`` to turn escape sequences into coloured ``<span>``
+    elements.  When the text contains no ANSI codes the output is simply
+    HTML-escaped plain text inside the same ``<pre>`` block.
+    """
+    from ansi2html import Ansi2HTMLConverter
+
+    conv = Ansi2HTMLConverter(inline=True, dark_bg=True)
+    body = conv.convert(text, full=False)
+    return mark_safe(f'<pre style="{_PRE_STYLE}">{body}</pre>')
+
 
 # ---------------------------------------------------------------------------
 # Mixin for model admins that want attached command run links
@@ -54,8 +76,8 @@ class CommandExecutionAdmin(ModelAdmin):
     readonly_fields = [
         "command_name",
         "status",
-        "stdout",
-        "stderr",
+        "stdout_display",
+        "stderr_display",
         "kwargs",
         "triggered_by",
         "backend",
@@ -65,6 +87,14 @@ class CommandExecutionAdmin(ModelAdmin):
         "finished_at",
     ]
     ordering = ["-created_at"]
+
+    @admin.display(description="Standard output")
+    def stdout_display(self, obj: CommandExecution) -> str:
+        return _ansi_to_html(obj.stdout) if obj.stdout else mark_safe("<em>—</em>")
+
+    @admin.display(description="Standard error / traceback")
+    def stderr_display(self, obj: CommandExecution) -> str:
+        return _ansi_to_html(obj.stderr) if obj.stderr else mark_safe("<em>—</em>")
 
     def has_add_permission(self, request):
         return False
