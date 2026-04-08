@@ -7,31 +7,23 @@ from django.shortcuts import redirect, render
 from django.urls import path
 from django.utils.safestring import mark_safe
 
+from ._ansi import ansi_to_html as _convert_ansi
 from .admin_compat import get_template, is_unfold_installed
 from .forms import form_from_command
 from .models import CommandExecution
 from .registry import _registry, has_permission
 from .runners import get_runner
 
-_PRE_STYLE = (
-    "background:#1e1e1e;color:#d4d4d4;padding:1em;border-radius:4px;"
-    "overflow:auto;max-height:500px;font-size:0.8rem;line-height:1.5;"
-    "white-space:pre;font-family:monospace;"
-)
-
 
 def _ansi_to_html(text: str) -> str:
-    """Convert ANSI-coded text to a styled ``<pre>`` block.
+    """Wrap ANSI-coded *text* in a themed ``<pre>`` block.
 
-    Uses ``ansi2html`` to turn escape sequences into coloured ``<span>``
-    elements.  When the text contains no ANSI codes the output is simply
-    HTML-escaped plain text inside the same ``<pre>`` block.
+    ANSI escape sequences are converted to ``<span>`` elements with CSS
+    classes (``ansi-fg-N``, ``ansi-bold``, …) and, for 256-colour / truecolor
+    codes, inline ``style`` attributes.  Plain text passes through HTML-escaped.
+    Theming (dark / light) is handled by ``ansi-output.css``.
     """
-    from ansi2html import Ansi2HTMLConverter
-
-    conv = Ansi2HTMLConverter(inline=True, dark_bg=True)
-    body = conv.convert(text, full=False)
-    return mark_safe(f'<pre style="{_PRE_STYLE}">{body}</pre>')
+    return mark_safe(f'<pre class="ansi-output">{_convert_ansi(text)}</pre>')
 
 
 # ---------------------------------------------------------------------------
@@ -70,6 +62,9 @@ class CommandRunnerModelAdminMixin:
 
 @admin.register(CommandExecution)
 class CommandExecutionAdmin(ModelAdmin):
+    class Media:
+        css = {"all": ("django_admin_runner/ansi-output.css",)}
+
     list_display = ["command_name", "status", "triggered_by", "backend", "created_at"]
     list_filter = ["status", "backend"]
     search_fields = ["command_name", "triggered_by__username"]

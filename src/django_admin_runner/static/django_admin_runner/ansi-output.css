@@ -1,0 +1,167 @@
+/*
+ * ANSI terminal output block for django-admin-runner
+ *
+ * Colours are defined as CSS custom properties on .ansi-output so they
+ * cascade to all child spans.  The dark palette is the default (terminals
+ * are dark by convention).  A light palette is applied automatically via
+ * prefers-color-scheme, and overridden by an explicit html.dark / html.light
+ * class set by Django admin 4.2+ and Unfold's theme toggle.
+ */
+
+/* ── Block layout ────────────────────────────────────────────────────── */
+
+.ansi-output {
+  display: block;
+  padding: 1em;
+  border-radius: 4px;
+  overflow: auto;
+  max-height: 500px;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  white-space: pre;
+  font-family: ui-monospace, "SFMono-Regular", "Cascadia Mono", "Menlo",
+    "Consolas", monospace;
+
+  /* ── Dark terminal palette (default) ────────────────────────────────── */
+  --ansi-bg: #1e1e1e;
+  --ansi-fg: #d4d4d4;
+
+  --ansi-0: #000000; /* black          */
+  --ansi-1: #cd3131; /* red            */
+  --ansi-2: #0dbc79; /* green          */
+  --ansi-3: #e5e510; /* yellow         */
+  --ansi-4: #2472c8; /* blue           */
+  --ansi-5: #bc3fbc; /* magenta        */
+  --ansi-6: #11a8cd; /* cyan           */
+  --ansi-7: #e5e5e5; /* white          */
+  --ansi-8: #666666; /* bright black   */
+  --ansi-9: #f14c4c; /* bright red     */
+  --ansi-10: #23d18b; /* bright green   */
+  --ansi-11: #f5f543; /* bright yellow  */
+  --ansi-12: #3b8eea; /* bright blue    */
+  --ansi-13: #d670d6; /* bright magenta */
+  --ansi-14: #29b8db; /* bright cyan    */
+  --ansi-15: #ffffff; /* bright white   */
+
+  background: var(--ansi-bg);
+  color: var(--ansi-fg);
+}
+
+/* ── Light palette via system preference ────────────────────────────── */
+
+@media (prefers-color-scheme: light) {
+  .ansi-output {
+    --ansi-bg: #f5f5f5;
+    --ansi-fg: #1a1a1a;
+
+    --ansi-0: #000000;
+    --ansi-1: #b91c1c;
+    --ansi-2: #15803d;
+    --ansi-3: #854d0e;
+    --ansi-4: #1d4ed8;
+    --ansi-5: #7e22ce;
+    --ansi-6: #0e7490;
+    --ansi-7: #6b7280;
+    --ansi-8: #374151;
+    --ansi-9: #dc2626;
+    --ansi-10: #16a34a;
+    --ansi-11: #a16207;
+    --ansi-12: #2563eb;
+    --ansi-13: #9333ea;
+    --ansi-14: #0891b2;
+    --ansi-15: #111827;
+  }
+}
+
+/* ── Explicit dark override (Django admin 4.2+ and Unfold) ──────────── */
+
+html.dark .ansi-output {
+  --ansi-bg: #1e1e1e;
+  --ansi-fg: #d4d4d4;
+
+  --ansi-0: #000000;
+  --ansi-1: #cd3131;
+  --ansi-2: #0dbc79;
+  --ansi-3: #e5e510;
+  --ansi-4: #2472c8;
+  --ansi-5: #bc3fbc;
+  --ansi-6: #11a8cd;
+  --ansi-7: #e5e5e5;
+  --ansi-8: #666666;
+  --ansi-9: #f14c4c;
+  --ansi-10: #23d18b;
+  --ansi-11: #f5f543;
+  --ansi-12: #3b8eea;
+  --ansi-13: #d670d6;
+  --ansi-14: #29b8db;
+  --ansi-15: #ffffff;
+}
+
+/* ── Explicit light override ────────────────────────────────────────── */
+
+html.light .ansi-output {
+  --ansi-bg: #f5f5f5;
+  --ansi-fg: #1a1a1a;
+
+  --ansi-0: #000000;
+  --ansi-1: #b91c1c;
+  --ansi-2: #15803d;
+  --ansi-3: #854d0e;
+  --ansi-4: #1d4ed8;
+  --ansi-5: #7e22ce;
+  --ansi-6: #0e7490;
+  --ansi-7: #6b7280;
+  --ansi-8: #374151;
+  --ansi-9: #dc2626;
+  --ansi-10: #16a34a;
+  --ansi-11: #a16207;
+  --ansi-12: #2563eb;
+  --ansi-13: #9333ea;
+  --ansi-14: #0891b2;
+  --ansi-15: #111827;
+}
+
+/* ── 4-bit foreground colour classes ────────────────────────────────── */
+
+.ansi-fg-0 { color: var(--ansi-0); }
+.ansi-fg-1 { color: var(--ansi-1); }
+.ansi-fg-2 { color: var(--ansi-2); }
+.ansi-fg-3 { color: var(--ansi-3); }
+.ansi-fg-4 { color: var(--ansi-4); }
+.ansi-fg-5 { color: var(--ansi-5); }
+.ansi-fg-6 { color: var(--ansi-6); }
+.ansi-fg-7 { color: var(--ansi-7); }
+.ansi-fg-8 { color: var(--ansi-8); }
+.ansi-fg-9 { color: var(--ansi-9); }
+.ansi-fg-10 { color: var(--ansi-10); }
+.ansi-fg-11 { color: var(--ansi-11); }
+.ansi-fg-12 { color: var(--ansi-12); }
+.ansi-fg-13 { color: var(--ansi-13); }
+.ansi-fg-14 { color: var(--ansi-14); }
+.ansi-fg-15 { color: var(--ansi-15); }
+
+/* ── 4-bit background colour classes ────────────────────────────────── */
+
+.ansi-bg-0 { background: var(--ansi-0); }
+.ansi-bg-1 { background: var(--ansi-1); }
+.ansi-bg-2 { background: var(--ansi-2); }
+.ansi-bg-3 { background: var(--ansi-3); }
+.ansi-bg-4 { background: var(--ansi-4); }
+.ansi-bg-5 { background: var(--ansi-5); }
+.ansi-bg-6 { background: var(--ansi-6); }
+.ansi-bg-7 { background: var(--ansi-7); }
+.ansi-bg-8 { background: var(--ansi-8); }
+.ansi-bg-9 { background: var(--ansi-9); }
+.ansi-bg-10 { background: var(--ansi-10); }
+.ansi-bg-11 { background: var(--ansi-11); }
+.ansi-bg-12 { background: var(--ansi-12); }
+.ansi-bg-13 { background: var(--ansi-13); }
+.ansi-bg-14 { background: var(--ansi-14); }
+.ansi-bg-15 { background: var(--ansi-15); }
+
+/* ── Text attribute classes ──────────────────────────────────────────── */
+
+.ansi-bold { font-weight: bold; }
+.ansi-dim { opacity: 0.6; }
+.ansi-italic { font-style: italic; }
+.ansi-underline { text-decoration: underline; }
