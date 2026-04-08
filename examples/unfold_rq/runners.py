@@ -3,7 +3,6 @@
 import django_rq
 from django.urls import reverse
 
-from django_admin_runner.models import CommandExecution
 from django_admin_runner.runners import BaseCommandRunner, RunResult
 from django_admin_runner.tasks import execute_command
 

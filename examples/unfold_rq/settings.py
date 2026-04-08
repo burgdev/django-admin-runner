@@ -2,11 +2,13 @@
 Unfold + Django-RQ example: demonstrates the custom runner interface.
 
 Requires: docker-compose up -d
-Then: python manage.py runserver
-And: python manage.py rqworker
+Then: ./manage.py runserver 8765
+And: ./manage.py rqworker
 """
 
 import os
+
+from django.urls import reverse_lazy
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -74,3 +76,48 @@ RQ_QUEUES = {
 
 # Use the custom RQ runner defined in runners.py
 ADMIN_RUNNER_BACKEND = "runners.RqCommandRunner"
+
+UNFOLD = {
+    "SIDEBAR": {
+        "navigation": [
+            {
+                "title": "Command Runner",
+                "separator": False,
+                "collapsible": False,
+                "items": [
+                    {
+                        "title": "Run Commands",
+                        "icon": "terminal",
+                        "link": reverse_lazy("admin:django_admin_runner_command_list"),
+                        "permission": lambda request: request.user.is_staff,
+                    },
+                    {
+                        "title": "Command executions",
+                        "icon": "history",
+                        "link": reverse_lazy(
+                            "admin:django_admin_runner_commandexecution_changelist"
+                        ),
+                        "permission": lambda request: request.user.is_staff,
+                    },
+                ],
+            },
+            {
+                "title": "Authentication",
+                "separator": True,
+                "collapsible": False,
+                "items": [
+                    {
+                        "title": "Users",
+                        "icon": "person",
+                        "link": reverse_lazy("admin:auth_user_changelist"),
+                    },
+                    {
+                        "title": "Groups",
+                        "icon": "group",
+                        "link": reverse_lazy("admin:auth_group_changelist"),
+                    },
+                ],
+            },
+        ]
+    }
+}

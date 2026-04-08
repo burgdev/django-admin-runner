@@ -29,16 +29,10 @@
           <tr class="{% cycle 'row1' 'row2' %}">
             <td><strong>{{ cmd.name }}</strong></td>
             <td style="color: var(--body-quiet-color, #666);">{{ cmd.command_class.help|default:"" }}</td>
-            <td style="text-align: right; white-space: nowrap;">
+            <td style="text-align: right;">
               <a href="{% url 'admin:django_admin_runner_command_run' cmd.name %}" class="button">
                 {% trans "Run" %}
               </a>
-              {% if has_celery_beat %}
-              <a href="{% url 'admin:django_celery_beat_periodictask_add' %}?task=django_admin_runner.schedule_command"
-                 class="button" style="margin-left: 0.5em;">
-                {% trans "Schedule" %}
-              </a>
-              {% endif %}
             </td>
           </tr>
           {% endfor %}

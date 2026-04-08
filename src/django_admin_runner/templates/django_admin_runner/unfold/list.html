@@ -11,43 +11,32 @@
 {% endblock %}
 
 {% block content %}
-<div id="content-main">
+<div class="flex flex-col gap-5">
   {% if grouped_commands %}
     {% for group_name, commands in grouped_commands.items %}
-    <div class="module" style="margin-bottom: 1.5em;">
-      <h2 style="padding: 0.5em 1em; margin: 0;">{{ group_name }}</h2>
-      <table class="results" style="width: 100%;">
-        <thead>
-          <tr>
-            <th scope="col">{% trans "Command" %}</th>
-            <th scope="col">{% trans "Description" %}</th>
-            <th scope="col"></th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for cmd in commands %}
-          <tr class="{% cycle 'row1' 'row2' %}">
-            <td><strong>{{ cmd.name }}</strong></td>
-            <td>{{ cmd.command_class.help|default:"" }}</td>
-            <td style="text-align: right; white-space: nowrap;">
-              <a href="{% url 'admin:django_admin_runner_command_run' cmd.name %}" class="button">
-                {% trans "Run" %}
-              </a>
-              {% if has_celery_beat %}
-              <a href="{% url 'admin:django_celery_beat_periodictask_add' %}?task=django_admin_runner.schedule_command"
-                 class="button" style="margin-left: 0.5em;">
-                {% trans "Schedule" %}
-              </a>
-              {% endif %}
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+    <div class="rounded-md overflow-hidden border border-gray-200 dark:border-gray-700">
+      <div class="px-4 py-2.5 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+        <span class="font-semibold text-sm text-gray-700 dark:text-gray-300">{{ group_name }}</span>
+      </div>
+      <div class="divide-y divide-gray-100 dark:divide-gray-700">
+        {% for cmd in commands %}
+        <div class="flex items-center justify-between px-4 py-3 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+          <div>
+            <p class="font-medium text-sm text-gray-900 dark:text-gray-100">{{ cmd.name }}</p>
+            {% if cmd.command_class.help %}
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{{ cmd.command_class.help }}</p>
+            {% endif %}
+          </div>
+          <a href="{% url 'admin:django_admin_runner_command_run' cmd.name %}" class="button">
+            {% trans "Run" %}
+          </a>
+        </div>
+        {% endfor %}
+      </div>
     </div>
     {% endfor %}
   {% else %}
-    <p>{% trans "No commands registered." %}</p>
+    <p class="text-sm text-gray-500 dark:text-gray-400">{% trans "No commands registered." %}</p>
   {% endif %}
 </div>
 {% endblock %}

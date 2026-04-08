@@ -12,36 +12,40 @@
 {% endblock %}
 
 {% block content %}
-<div id="content-main">
-  <h1>{{ title }}</h1>
-
+<div class="rounded-md border border-gray-200 dark:border-gray-700 overflow-hidden">
   {% if entry.group %}
-  <p><strong>{% trans "Group" %}:</strong> {{ entry.group }}</p>
+  <div class="px-4 py-2.5 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+    <span class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+      {{ entry.group }}
+    </span>
+  </div>
   {% endif %}
 
-  <form method="post">
+  <form method="post" class="p-4">
     {% csrf_token %}
     {% if form.fields %}
-      <fieldset class="module aligned">
+      <div class="flex flex-col gap-4 mb-6">
         {% for field in form %}
-        <div class="form-row">
+        <div>
           {{ field.label_tag }}
           {{ field }}
           {% if field.help_text %}
-          <p class="help">{{ field.help_text }}</p>
+          <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">{{ field.help_text }}</p>
           {% endif %}
           {% if field.errors %}
-          <ul class="errorlist">
+          <ul class="mt-1">
             {% for error in field.errors %}
-            <li>{{ error }}</li>
+            <li class="text-xs text-red-600 dark:text-red-400">{{ error }}</li>
             {% endfor %}
           </ul>
           {% endif %}
         </div>
         {% endfor %}
-      </fieldset>
+      </div>
     {% else %}
-      <p>{% trans "This command has no configurable parameters." %}</p>
+      <p class="text-sm text-gray-500 dark:text-gray-400 mb-6">
+        {% trans "This command has no configurable parameters." %}
+      </p>
     {% endif %}
 
     <div class="submit-row">

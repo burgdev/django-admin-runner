@@ -2,17 +2,14 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, cast
 
-from django.apps import apps as django_apps
-from django.conf import settings as django_settings
 from django.contrib import admin
-from django.contrib.admin import ModelAdmin
 from django.http import Http404, HttpResponseForbidden
 from django.shortcuts import redirect, render
 from django.urls import path
 from django.utils.safestring import SafeString, mark_safe
 
 from ._ansi import ansi_to_html as _convert_ansi
-from .admin_compat import get_template, is_unfold_installed
+from .admin_compat import get_model_admin_base, get_template, is_unfold_installed
 from .forms import form_from_command
 from .models import CommandExecution
 from .registry import _registry, has_permission
@@ -23,13 +20,7 @@ if TYPE_CHECKING:
 
 
 def _ansi_to_html(text: str) -> SafeString:
-    """Wrap ANSI-coded *text* in a themed ``<pre>`` block.
-
-    ANSI escape sequences are converted to ``<span>`` elements with CSS
-    classes (``ansi-fg-N``, ``ansi-bold``, …) and, for 256-colour / truecolor
-    codes, inline ``style`` attributes.  Plain text passes through HTML-escaped.
-    Theming (dark / light) is handled by ``ansi-output.css``.
-    """
+    """Wrap ANSI-coded *text* in a themed ``<pre>`` block."""
     return cast(SafeString, mark_safe(f'<pre class="ansi-output">{_convert_ansi(text)}</pre>'))
 
 
@@ -68,9 +59,11 @@ class CommandRunnerModelAdminMixin:
 # CommandExecution admin (also hosts the command list/run views)
 # ---------------------------------------------------------------------------
 
+_ModelAdminBase = get_model_admin_base()
+
 
 @admin.register(CommandExecution)
-class CommandExecutionAdmin(ModelAdmin):
+class CommandExecutionAdmin(_ModelAdminBase):  # type: ignore[misc]
     class Media:
         css = {"all": ("django_admin_runner/ansi-output.css",)}
 
@@ -89,6 +82,34 @@ class CommandExecutionAdmin(ModelAdmin):
         "created_at",
         "started_at",
         "finished_at",
+    ]
+    fieldsets = [
+        (
+            None,
+            {
+                "fields": [
+                    "command_name",
+                    "status",
+                    "kwargs",
+                    "triggered_by",
+                    "backend",
+                    "task_id",
+                ]
+            },
+        ),
+        (
+            "Output",
+            {
+                "fields": ["stdout_display", "stderr_display"],
+            },
+        ),
+        (
+            "Timing",
+            {
+                "fields": ["created_at", "started_at", "finished_at"],
+                "classes": ["collapse"],
+            },
+        ),
     ]
     ordering = ["-created_at"]
 
@@ -137,16 +158,10 @@ class CommandExecutionAdmin(ModelAdmin):
         for entry in sorted(visible, key=lambda e: (e["group"], e["name"])):
             grouped.setdefault(entry["group"], []).append(entry)
 
-        has_celery_beat = (
-            django_apps.is_installed("django_celery_beat")
-            and getattr(django_settings, "ADMIN_RUNNER_BACKEND", "django") == "celery"
-        )
-
         context = {
             **self.admin_site.each_context(request),
             "title": "Run Management Commands",
             "grouped_commands": grouped,
-            "has_celery_beat": has_celery_beat,
             "opts": self.model._meta,
         }
         return render(request, get_template("list"), context)

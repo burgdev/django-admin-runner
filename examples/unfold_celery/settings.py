@@ -2,11 +2,13 @@
 Unfold + Celery example: full production async setup.
 
 Requires: docker-compose up -d
-Then: python manage.py runserver
+Then: ./manage.py runserver 8765
 And: celery -A celery_app worker -l info
 """
 
 import os
+
+from django.urls import reverse_lazy
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -71,3 +73,93 @@ CELERY_RESULT_BACKEND = "django-db"
 CELERY_RESULT_EXTENDED = True
 
 ADMIN_RUNNER_BACKEND = "celery"
+
+UNFOLD = {
+    "SIDEBAR": {
+        "navigation": [
+            {
+                "title": "Command Runner",
+                "separator": False,
+                "collapsible": False,
+                "items": [
+                    {
+                        "title": "Run Commands",
+                        "icon": "terminal",
+                        "link": reverse_lazy("admin:django_admin_runner_command_list"),
+                        "permission": lambda request: request.user.is_staff,
+                    },
+                    {
+                        "title": "Command executions",
+                        "icon": "history",
+                        "link": reverse_lazy(
+                            "admin:django_admin_runner_commandexecution_changelist"
+                        ),
+                        "permission": lambda request: request.user.is_staff,
+                    },
+                ],
+            },
+            {
+                "title": "Authentication",
+                "separator": True,
+                "collapsible": False,
+                "items": [
+                    {
+                        "title": "Users",
+                        "icon": "person",
+                        "link": reverse_lazy("admin:auth_user_changelist"),
+                    },
+                    {
+                        "title": "Groups",
+                        "icon": "group",
+                        "link": reverse_lazy("admin:auth_group_changelist"),
+                    },
+                ],
+            },
+            {
+                "title": "Periodic Tasks",
+                "separator": True,
+                "collapsible": True,
+                "items": [
+                    {
+                        "title": "Periodic tasks",
+                        "icon": "schedule",
+                        "link": reverse_lazy("admin:django_celery_beat_periodictask_changelist"),
+                    },
+                    {
+                        "title": "Intervals",
+                        "link": reverse_lazy(
+                            "admin:django_celery_beat_intervalschedule_changelist"
+                        ),
+                    },
+                    {
+                        "title": "Crontabs",
+                        "link": reverse_lazy("admin:django_celery_beat_crontabschedule_changelist"),
+                    },
+                    {
+                        "title": "Solar events",
+                        "link": reverse_lazy("admin:django_celery_beat_solarschedule_changelist"),
+                    },
+                    {
+                        "title": "Clocked",
+                        "link": reverse_lazy("admin:django_celery_beat_clockedschedule_changelist"),
+                    },
+                ],
+            },
+            {
+                "title": "Celery Results",
+                "separator": False,
+                "collapsible": True,
+                "items": [
+                    {
+                        "title": "Task results",
+                        "link": reverse_lazy("admin:django_celery_results_taskresult_changelist"),
+                    },
+                    {
+                        "title": "Group results",
+                        "link": reverse_lazy("admin:django_celery_results_groupresult_changelist"),
+                    },
+                ],
+            },
+        ]
+    }
+}

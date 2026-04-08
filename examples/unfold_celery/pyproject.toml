@@ -6,6 +6,7 @@ dependencies = [
     "django-admin-runner[celery,unfold]",
     "django-celery-beat>=2.5",
     "django-celery-results>=2.5",
+    "redis>=4.0",
 ]
 
 [tool.uv.sources]
