@@ -1,7 +1,3 @@
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-
 [project]
 name = "django-admin-runner"
 version = "0.1.0"
@@ -9,33 +5,61 @@ description = "Run Django management commands from the admin with auto-generated
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.12"
-dependencies = [
-    "django>=6.0",
+dependencies = ["django>=6.0"]
+
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Framework :: Django",
+  "Framework :: Django :: 6.0",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Internet :: WWW/HTTP :: Dynamic Content",
 ]
 
 [project.optional-dependencies]
 celery = ["celery>=5.3"]
 unfold = ["django-unfold>=0.40"]
-dev = [
-    "pytest",
-    "pytest-django",
-    "pytest-cov",
-    "django-unfold",
-    "celery",
-    "django-rq",
-    "bump-my-version",
-    "mkdocs-material",
-    "mkdocstrings[python]",
-]
 
 [project.urls]
 Homepage = "https://github.com/burgdev/django-admin-runner"
 Documentation = "https://burgdev.github.io/django-admin-runner"
 Repository = "https://github.com/burgdev/django-admin-runner"
 Issues = "https://github.com/burgdev/django-admin-runner/issues"
+Changelog = "https://github.com/burgdev/django-admin-runner/blob/main/CHANGELOG.md"
+
+[dependency-groups]
+dev = [
+  "bump2version>=1.0.1",
+  "git-cliff>=2.7.0",
+  "pre-commit>=4.0.1",
+  "pyright>=1.1.0",
+  "ruff>=0.8.2",
+]
+docs = [
+  "mkdocs>=1.4.0",
+  "mkdocs-material>=9.5.49",
+  "mkdocs-open-in-new-tab>=1.0.8",
+  "mkdocs-literate-nav>=0.6.1",
+  "mkdocs-section-index>=0.3.9",
+  "mkdocstrings[python]>=0.22.0",
+]
+test = [
+  "pytest>=8.3.4",
+  "pytest-django>=4.10.0",
+  "pytest-cov>=4.1.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/django_admin_runner"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/django_admin_runner"]
 
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "tests.settings"
@@ -47,3 +71,6 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]

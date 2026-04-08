@@ -1,8 +1,15 @@
-# django-admin-runner
+<h3 align="center"><b>django-admin-runner</b></h3>
+<p align="center">
+  <em>Run Django management commands from the admin — with auto-generated forms,
+  pluggable task runners, and a unified execution log.</em>
+</p>
+<p align="center">
+    <b><a href="https://burgdev.github.io/django-admin-runner">Documentation</a></b>
+    | <b><a href="https://pypi.org/project/django-admin-runner">PyPI</a></b>
+    | <b><a href="https://github.com/burgdev/django-admin-runner/blob/main/CHANGELOG.md">Changelog</a></b>
+</p>
 
-Run Django management commands from the admin — with auto-generated forms,
-pluggable task runners, and a unified execution log. Supports plain Django
-admin and Unfold out of the box.
+---
 
 ## Features
 
@@ -14,19 +21,28 @@ admin and Unfold out of the box.
 - **Model attachment** — show a "Run" button on any model's admin change-list via `models=[...]`
 - **Unfold support** — auto-detected, uses Unfold templates when available
 
-## Quick start
+## Installation
 
 ```bash
 pip install django-admin-runner
 ```
 
+Add to `INSTALLED_APPS`:
+
 ```python
-# settings.py
 INSTALLED_APPS = [
     ...
     "django_admin_runner",
 ]
 ```
+
+Run migrations:
+
+```bash
+python manage.py migrate
+```
+
+## Quick start
 
 ```python
 # myapp/management/commands/my_command.py
@@ -39,6 +55,7 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument("--count", type=int, default=10)
+        parser.add_argument("--dry-run", action="store_true")
 
     def handle(self, *args, **options):
         self.stdout.write(f"Running {options['count']} times")
@@ -46,9 +63,28 @@ class Command(BaseCommand):
 
 Visit `/admin/django_admin_runner/commandexecution/commands/` to run your commands.
 
-## Documentation
+## Development
 
-https://burgdev.github.io/django-admin-runner
+**Requirements:** [uv](https://docs.astral.sh/uv/) and [just](https://github.com/casey/just)
+
+```bash
+# Install dependencies and pre-commit hooks
+just install
+
+# Run tests
+just tests
+
+# Run linters
+just check
+
+# Serve docs locally
+just docs
+```
+
+## Contributing
+
+Contributions are welcome! Please open an issue or pull request on
+[GitHub](https://github.com/burgdev/django-admin-runner).
 
 ## License
 

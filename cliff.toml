@@ -1,19 +1,75 @@
-[changelog]
-header = "# Changelog\n"
-body = """
-{% for group, commits in commits | group_by(attribute="group") %}
-### {{ group | upper_first }}
-{% for commit in commits %}
-- {{ commit.message }} ([{{ commit.id | truncate(length=7, end="") }}]({{ commit.github.url }}))
-{% endfor %}
-{% endfor %}
-"""
+[bump]
+initial_tag = "v0.1.0"
+
+[remote.github]
+owner = "burgdev"
+repo = "django-admin-runner"
 
 [git]
-conventional_commits = true
+tag_pattern = "^v[0-9]+\\.[0-9]+\\.[0-9]+"
+sort_commits = "newest"
+conventional_commits = false
+filter_unconventional = false
 commit_parsers = [
-  { message = "^feat", group = "Features" },
-  { message = "^fix", group = "Bug Fixes" },
-  { message = "^docs", group = "Documentation" },
-  { message = "^refactor", group = "Refactoring" },
+  { field = "github.pr_labels", pattern = "INTERNAL", skip = true },
+  { field = "github.pr_labels", pattern = "BREAKING", group = "<!-- 00 -->🏗️ Breaking changes" },
+  { field = "github.pr_labels", pattern = "type:feature", group = "<!-- 10 -->🚀 Features" },
+  { field = "github.pr_labels", pattern = "type:bug", group = "<!-- 20 -->🐛 Fixes" },
+  { field = "github.pr_labels", pattern = "type:refactor", group = "<!-- 30 -->🏭 Refactor" },
+  { field = "github.pr_labels", pattern = "type:docs", group = "<!-- 40 -->📝 Documentation" },
+  { field = "github.pr_labels", pattern = "type:deps", group = "<!-- 50 -->🧪 Dependencies" },
+  { field = "github.pr_labels", pattern = "type:others", group = "<!-- 60 -->🌀 Others" },
+  { field = "github.pr_labels", pattern = "type:tooling", group = "<!-- 60 -->🌀 Others" },
+  { field = "github.pr_labels", pattern = ".*", skip = true },
 ]
+
+commit_preprocessors = [{ pattern = '\.?\s*\(#[0-9]+\)$', replace = "" }]
+
+[changelog]
+header = """
+<!-- Auto generated. Run 'just release' in order to update -->\n
+# Changelog\n
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).\n
+"""
+body = """
+{%- macro remote_url() -%}
+  https://github.com/{{ remote.github.owner }}/{{ remote.github.repo }}
+{%- endmacro -%}
+
+{% if version -%}
+    ## [{{ version | trim_start_matches(pat="v") }}] - {{ timestamp | date(format="%Y-%m-%d") }}
+{% else -%}
+    ## [Unreleased]
+{% endif -%}
+
+{% for group, commits in commits | group_by(attribute="group") %}
+    #### {{ group | striptags | trim | upper_first }}
+    {%- for commit in commits %}
+        - {{ commit.remote.pr_title | split(pat="\n") | first | upper_first | trim }}\
+            {% if commit.remote.pr_number %}\
+            {# #} ([#{{ commit.remote.pr_number }}]({{ self::remote_url() }}/pull/{{ commit.remote.pr_number }})) \
+            {%- endif -%}
+    {% endfor %}
+{% endfor %}
+{% if version -%}
+    {% if previous.version -%}
+        [{{ version | trim_start_matches(pat="v") }}]: \
+            {{ self::remote_url() }}/compare/{{ previous.version }}..{{ version }}
+    {% else -%}
+        [{{ version | trim_start_matches(pat="v") }}]: \
+            {{ self::remote_url() }}/releases/tag/{{ version }}
+    {% endif -%}
+{% else -%}
+    [unreleased]: {{ self::remote_url() }}/compare/{{ previous.version }}..HEAD
+{% endif -%}
+{# #}\n
+"""
+footer = """
+{%- macro remote_url() -%}
+  https://github.com/{{ remote.github.owner }}/{{ remote.github.repo }}
+{%- endmacro -%}
+"""
+trim = true
