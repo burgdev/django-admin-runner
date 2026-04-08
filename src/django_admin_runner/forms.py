@@ -45,6 +45,36 @@ def _hidden_aware_argparse():
         argparse._ActionsContainer.add_argument = original  # noqa: SLF001
 
 
+def _apply_unfold_widget(field: forms.Field) -> None:
+    """Replace *field*'s widget with the Unfold-styled equivalent.
+
+    No-ops silently when ``unfold`` is not in ``INSTALLED_APPS`` or not installed.
+    """
+    from .admin_compat import is_unfold_installed
+
+    if not is_unfold_installed():
+        return
+
+    try:
+        from unfold.widgets import (
+            UnfoldAdminIntegerFieldWidget,
+            UnfoldAdminSelectWidget,
+            UnfoldAdminTextInputWidget,
+            UnfoldBooleanWidget,
+        )
+    except ImportError:
+        return
+
+    if isinstance(field, forms.BooleanField):
+        field.widget = UnfoldBooleanWidget()
+    elif isinstance(field, forms.ChoiceField):
+        field.widget = UnfoldAdminSelectWidget()
+    elif isinstance(field, forms.IntegerField):
+        field.widget = UnfoldAdminIntegerFieldWidget()
+    elif isinstance(field, forms.CharField):
+        field.widget = UnfoldAdminTextInputWidget()
+
+
 def form_from_command(command_name: str) -> type[forms.Form]:
     """Build a Django ``Form`` class by introspecting *command_name*'s argparse parser.
 
@@ -53,6 +83,8 @@ def form_from_command(command_name: str) -> type[forms.Form]:
     2. Arguments with ``hidden=True`` (custom attr) are excluded.
     3. ``exclude_params`` from the registry entry are excluded.
     4. If ``params`` allowlist is set, only those ``dest`` names are kept.
+
+    When ``unfold`` is installed, Unfold-styled widgets are applied automatically.
     """
     from django.core.management import get_commands, load_command_class
 
@@ -85,6 +117,7 @@ def form_from_command(command_name: str) -> type[forms.Form]:
 
         field = _action_to_field(action)
         if field is not None:
+            _apply_unfold_widget(field)
             fields[dest] = field
 
     return type("CommandForm", (forms.Form,), fields)

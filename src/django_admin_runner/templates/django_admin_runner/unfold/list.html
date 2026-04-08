@@ -14,20 +14,27 @@
 <div class="flex flex-col gap-5">
   {% if grouped_commands %}
     {% for group_name, commands in grouped_commands.items %}
-    <div class="rounded-md overflow-hidden border border-gray-200 dark:border-gray-700">
-      <div class="px-4 py-2.5 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-        <span class="font-semibold text-sm text-gray-700 dark:text-gray-300">{{ group_name }}</span>
+    <div class="rounded-default border border-base-200 dark:border-base-700 overflow-hidden">
+      <div class="px-4 py-2.5 bg-base-50 dark:bg-base-800 border-b border-base-200 dark:border-base-700">
+        <span class="font-semibold text-xs uppercase tracking-wider text-font-default-light dark:text-font-default-dark">
+          {{ group_name }}
+        </span>
       </div>
-      <div class="divide-y divide-gray-100 dark:divide-gray-700">
+      <div class="divide-y divide-base-100 dark:divide-base-700">
         {% for cmd in commands %}
-        <div class="flex items-center justify-between px-4 py-3 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+        <div class="flex items-center justify-between px-4 py-3 bg-white dark:bg-base-900">
           <div>
-            <p class="font-medium text-sm text-gray-900 dark:text-gray-100">{{ cmd.name }}</p>
+            <p class="font-semibold text-sm text-font-important-light dark:text-font-important-dark">
+              {{ cmd.name }}
+            </p>
             {% if cmd.command_class.help %}
-            <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{{ cmd.command_class.help }}</p>
+            <p class="text-xs text-font-default-light dark:text-font-default-dark mt-0.5">
+              {{ cmd.command_class.help }}
+            </p>
             {% endif %}
           </div>
-          <a href="{% url 'admin:django_admin_runner_command_run' cmd.name %}" class="button">
+          <a href="{% url 'admin:django_admin_runner_command_run' cmd.name %}"
+             class="border cursor-pointer font-medium px-3 py-2 rounded-default text-center whitespace-nowrap bg-primary-600 border-transparent text-white text-sm hover:bg-primary-500 transition-colors">
             {% trans "Run" %}
           </a>
         </div>
@@ -36,7 +43,9 @@
     </div>
     {% endfor %}
   {% else %}
-    <p class="text-sm text-gray-500 dark:text-gray-400">{% trans "No commands registered." %}</p>
+    <p class="text-sm text-font-default-light dark:text-font-default-dark">
+      {% trans "No commands registered." %}
+    </p>
   {% endif %}
 </div>
 {% endblock %}

@@ -12,46 +12,92 @@
 {% endblock %}
 
 {% block content %}
-<div class="rounded-md border border-gray-200 dark:border-gray-700 overflow-hidden">
+<div class="rounded-default border border-base-200 dark:border-base-700 overflow-hidden">
+
   {% if entry.group %}
-  <div class="px-4 py-2.5 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-    <span class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+  <div class="px-4 py-2.5 bg-base-50 dark:bg-base-800 border-b border-base-200 dark:border-base-700">
+    <span class="font-semibold text-xs uppercase tracking-wider text-font-default-light dark:text-font-default-dark">
       {{ entry.group }}
     </span>
   </div>
   {% endif %}
 
-  <form method="post" class="p-4">
-    {% csrf_token %}
-    {% if form.fields %}
-      <div class="flex flex-col gap-4 mb-6">
-        {% for field in form %}
-        <div>
-          {{ field.label_tag }}
-          {{ field }}
-          {% if field.help_text %}
-          <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">{{ field.help_text }}</p>
-          {% endif %}
-          {% if field.errors %}
-          <ul class="mt-1">
-            {% for error in field.errors %}
-            <li class="text-xs text-red-600 dark:text-red-400">{{ error }}</li>
-            {% endfor %}
-          </ul>
-          {% endif %}
-        </div>
-        {% endfor %}
-      </div>
-    {% else %}
-      <p class="text-sm text-gray-500 dark:text-gray-400 mb-6">
-        {% trans "This command has no configurable parameters." %}
-      </p>
-    {% endif %}
+  <div class="p-6">
+    <form method="post">
+      {% csrf_token %}
 
-    <div class="submit-row">
-      <input type="submit" value="{% trans "Run command" %}" class="default">
-      <a href="{% url 'admin:django_admin_runner_command_list' %}">{% trans "Cancel" %}</a>
-    </div>
-  </form>
+      {% if form.fields %}
+        <div class="flex flex-col gap-5 mb-8 max-w-2xl">
+          {% for field in form %}
+
+          {% if field.widget_type == 'unfoldbooleanwidget' or field.widget_type == 'checkboxinput' %}
+          {# ── Checkbox row ── #}
+          <div>
+            <div class="flex items-center gap-3 group {% if field.errors %}errors{% endif %}">
+              {{ field }}
+              <label for="{{ field.id_for_label }}"
+                     class="font-semibold ml-2 text-sm text-font-important-light dark:text-font-important-dark cursor-pointer">
+                {{ field.label }}
+              </label>
+            </div>
+            {% if field.help_text %}
+            <p class="mt-1 ml-9 text-xs text-font-default-light dark:text-font-default-dark">
+              {{ field.help_text }}
+            </p>
+            {% endif %}
+            {% if field.errors %}
+            <ul class="mt-1 ml-9">
+              {% for error in field.errors %}
+              <li class="text-xs text-red-600 dark:text-red-400">{{ error }}</li>
+              {% endfor %}
+            </ul>
+            {% endif %}
+          </div>
+
+          {% else %}
+          {# ── Standard input / select ── #}
+          <div class="group {% if field.errors %}errors{% endif %}">
+            <label for="{{ field.id_for_label }}"
+                   class="block font-semibold mb-2 text-sm text-font-important-light dark:text-font-important-dark">
+              {{ field.label }}
+            </label>
+            {{ field }}
+            {% if field.help_text %}
+            <p class="mt-1 text-xs text-font-default-light dark:text-font-default-dark">
+              {{ field.help_text }}
+            </p>
+            {% endif %}
+            {% if field.errors %}
+            <ul class="mt-1">
+              {% for error in field.errors %}
+              <li class="text-xs text-red-600 dark:text-red-400">{{ error }}</li>
+              {% endfor %}
+            </ul>
+            {% endif %}
+          </div>
+
+          {% endif %}
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="text-sm text-font-default-light dark:text-font-default-dark mb-8">
+          {% trans "This command has no configurable parameters." %}
+        </p>
+      {% endif %}
+
+      <div class="flex items-center gap-4">
+        <button type="submit"
+                class="border cursor-pointer font-medium px-3 py-2 rounded-default text-center whitespace-nowrap bg-primary-600 border-transparent text-white text-sm hover:bg-primary-500 transition-colors">
+          {% trans "Run command" %}
+        </button>
+        <a href="{% url 'admin:django_admin_runner_command_list' %}"
+           class="text-sm font-medium text-font-default-light dark:text-font-default-dark hover:text-primary-600 dark:hover:text-primary-400 transition-colors">
+          {% trans "Cancel" %}
+        </a>
+      </div>
+
+    </form>
+  </div>
+
 </div>
 {% endblock %}
