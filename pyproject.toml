@@ -1,0 +1,49 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "django-admin-runner"
+version = "0.1.0"
+description = "Run Django management commands from the admin with auto-generated forms and pluggable task runners"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.12"
+dependencies = [
+    "django>=6.0",
+]
+
+[project.optional-dependencies]
+celery = ["celery>=5.3"]
+unfold = ["django-unfold>=0.40"]
+dev = [
+    "pytest",
+    "pytest-django",
+    "pytest-cov",
+    "django-unfold",
+    "celery",
+    "django-rq",
+    "bump-my-version",
+    "mkdocs-material",
+    "mkdocstrings[python]",
+]
+
+[project.urls]
+Homepage = "https://github.com/burgdev/django-admin-runner"
+Documentation = "https://burgdev.github.io/django-admin-runner"
+Repository = "https://github.com/burgdev/django-admin-runner"
+Issues = "https://github.com/burgdev/django-admin-runner/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/django_admin_runner"]
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "tests.settings"
+pythonpath = ["src", "."]
+
+[tool.ruff]
+src = ["src"]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]

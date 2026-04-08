@@ -1,0 +1,73 @@
+"""
+Unfold + Celery example: full production async setup.
+
+Requires: docker-compose up -d
+Then: python manage.py runserver
+And: celery -A celery_app worker -l info
+"""
+
+import os
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+SECRET_KEY = "unfold-celery-example-secret-key-change-in-production"
+DEBUG = True
+ALLOWED_HOSTS = ["*"]
+
+INSTALLED_APPS = [
+    "unfold",
+    "django.contrib.admin",
+    "django.contrib.auth",
+    "django.contrib.contenttypes",
+    "django.contrib.messages",
+    "django.contrib.sessions",
+    "django.contrib.staticfiles",
+    "django_celery_beat",
+    "django_celery_results",
+    "django_admin_runner",
+    "books",
+]
+
+MIDDLEWARE = [
+    "django.middleware.security.SecurityMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+]
+
+ROOT_URLCONF = "urls"
+
+TEMPLATES = [
+    {
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [],
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                "django.template.context_processors.debug",
+                "django.template.context_processors.request",
+                "django.contrib.auth.context_processors.auth",
+                "django.contrib.messages.context_processors.messages",
+            ]
+        },
+    }
+]
+
+DATABASES = {
+    "default": {
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": os.path.join(BASE_DIR, "db.sqlite3"),
+    }
+}
+
+STATIC_URL = "/static/"
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# Celery
+CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", "redis://localhost:6379/0")
+CELERY_RESULT_BACKEND = "django-db"
+CELERY_RESULT_EXTENDED = True
+
+ADMIN_RUNNER_BACKEND = "celery"

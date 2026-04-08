@@ -1,0 +1,13 @@
+services:
+  valkey:
+    image: valkey/valkey:8-alpine
+    ports:
+      - "6379:6379"
+
+  rq-worker:
+    build: .
+    command: python manage.py rqworker
+    environment:
+      - REDIS_HOST=valkey
+    depends_on:
+      - valkey

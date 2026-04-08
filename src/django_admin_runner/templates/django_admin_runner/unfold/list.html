@@ -1,0 +1,33 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "Run Management Commands" %} | {{ site_title|default:_('Django site admin') }}{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% trans "Home" %}</a>
+  &rsaquo; {% trans "Run Management Commands" %}
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+  {% if grouped_commands %}
+    {% for group_name, commands in grouped_commands.items %}
+    <h2 style="margin-top: 1.5em;">{{ group_name }}</h2>
+    <ul style="list-style: none; padding: 0; margin-bottom: 1em;">
+      {% for cmd in commands %}
+      <li style="margin-bottom: 0.5em;">
+        <a href="{% url 'admin:django_admin_runner_command_run' cmd.name %}"
+           style="font-weight: 500;">
+          {{ cmd.name }}
+        </a>
+      </li>
+      {% endfor %}
+    </ul>
+    {% endfor %}
+  {% else %}
+    <p>{% trans "No commands registered." %}</p>
+  {% endif %}
+</div>
+{% endblock %}

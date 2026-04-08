@@ -1,0 +1,41 @@
+site_name: django-admin-runner
+site_url: https://burgdev.github.io/django-admin-runner
+repo_url: https://github.com/burgdev/django-admin-runner
+repo_name: burgdev/django-admin-runner
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - content.code.copy
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+
+nav:
+  - Home: index.md
+  - Getting Started:
+    - Installation: installation.md
+    - Quickstart: quickstart.md
+  - Reference:
+    - Decorator: decorator.md
+    - Runners: runners.md
+    - Custom Runner: custom-runner.md
+    - Admin Themes: admin-themes.md
+  - Changelog: changelog.md
