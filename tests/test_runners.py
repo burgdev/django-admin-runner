@@ -133,24 +133,14 @@ class TestDjangoTaskRunner:
 
 def test_is_immediate_backend_true():
     settings = {
-        "TASKS": {
-            "default": {
-                "BACKEND": "django.tasks.backends.immediate.ImmediateBackend"
-            }
-        }
+        "TASKS": {"default": {"BACKEND": "django.tasks.backends.immediate.ImmediateBackend"}}
     }
     with override_settings(**settings):
         assert _is_immediate_backend() is True
 
 
 def test_is_immediate_backend_false():
-    settings = {
-        "TASKS": {
-            "default": {
-                "BACKEND": "django.tasks.backends.database.DatabaseBackend"
-            }
-        }
-    }
+    settings = {"TASKS": {"default": {"BACKEND": "django.tasks.backends.database.DatabaseBackend"}}}
     with override_settings(**settings):
         assert _is_immediate_backend() is False
 

@@ -49,8 +49,16 @@ class TestFormFromCommand:
 
     def test_default_django_params_excluded(self):
         FormClass = form_from_command("simple_command")
-        excluded = {"verbosity", "traceback", "settings", "pythonpath",
-                    "no_color", "force_color", "skip_checks", "version"}
+        excluded = {
+            "verbosity",
+            "traceback",
+            "settings",
+            "pythonpath",
+            "no_color",
+            "force_color",
+            "skip_checks",
+            "version",
+        }
         for param in excluded:
             assert param not in FormClass().fields, f"{param} should be excluded"
 
