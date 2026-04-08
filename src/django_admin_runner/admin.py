@@ -50,6 +50,7 @@ class CommandRunnerModelAdminMixin:
 class CommandExecutionAdmin(ModelAdmin):
     list_display = ["command_name", "status", "triggered_by", "backend", "created_at"]
     list_filter = ["status", "backend"]
+    search_fields = ["command_name", "triggered_by__username"]
     readonly_fields = [
         "command_name",
         "status",
@@ -95,11 +96,7 @@ class CommandExecutionAdmin(ModelAdmin):
         return custom + urls
 
     def _command_list_view(self, request):
-        visible = [
-            entry
-            for entry in _registry.values()
-            if has_permission(request.user, entry)
-        ]
+        visible = [entry for entry in _registry.values() if has_permission(request.user, entry)]
         grouped: dict[str, list] = {}
         for entry in sorted(visible, key=lambda e: (e["group"], e["name"])):
             grouped.setdefault(entry["group"], []).append(entry)
@@ -125,13 +122,12 @@ class CommandExecutionAdmin(ModelAdmin):
         if request.method == "POST":
             form = FormClass(request.POST)
             if form.is_valid():
-                kwargs = {
-                    k: v for k, v in form.cleaned_data.items() if v not in ("", None, False)
-                }
-                # Keep explicit False values for boolean flags
-                kwargs.update(
-                    {k: v for k, v in form.cleaned_data.items() if isinstance(v, bool)}
-                )
+                kwargs = {}
+                for k, v in form.cleaned_data.items():
+                    if isinstance(v, bool):
+                        kwargs[k] = v  # always include booleans (True and False)
+                    elif v not in ("", None):
+                        kwargs[k] = v  # exclude empty strings and None
                 execution = CommandExecution.objects.create(
                     command_name=command_name,
                     kwargs=kwargs,

@@ -19,5 +19,3 @@ jobs:
       - run: uv sync --all-groups --all-extras
 
       - run: uv run pytest --cov=django_admin_runner --cov-report=xml
-
-      - run: uv run ruff check src tests

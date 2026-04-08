@@ -1,0 +1,11 @@
+[project]
+name = "example-unfold-rq"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "django-admin-runner[unfold]",
+    "django-rq>=2.10",
+]
+
+[tool.uv.sources]
+django-admin-runner = { path = "../..", editable = true }

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import traceback
 
 from django.core.management import call_command
 from django.utils.timezone import now
@@ -25,9 +26,9 @@ def execute_command(command_name: str, kwargs: dict, execution_pk: int) -> None:
     try:
         call_command(command_name, stdout=stdout_buf, stderr=stderr_buf, **kwargs)
         execution.status = CommandExecution.Status.SUCCESS
-    except Exception as exc:
+    except Exception:
         execution.status = CommandExecution.Status.FAILED
-        execution.stderr = str(exc)
+        execution.stderr = traceback.format_exc()
     finally:
         execution.stdout = stdout_buf.getvalue()
         if not execution.stderr:

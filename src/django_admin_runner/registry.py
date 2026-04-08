@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import importlib
+import logging
 import pkgutil
+
+logger = logging.getLogger(__name__)
 
 _registry: dict[str, dict] = {}
 
@@ -100,4 +103,9 @@ def autodiscover_commands() -> None:
                 try:
                     importlib.import_module(f"{pkg_path}.{module_name}")
                 except Exception:
-                    pass
+                    logger.warning(
+                        "django-admin-runner: failed to import %s.%s",
+                        pkg_path,
+                        module_name,
+                        exc_info=True,
+                    )
