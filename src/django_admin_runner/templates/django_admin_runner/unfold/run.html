@@ -23,7 +23,7 @@
   {% endif %}
 
   <div class="p-6">
-    <form method="post">
+    <form method="post" enctype="multipart/form-data">
       {% csrf_token %}
 
       {% if form.fields %}

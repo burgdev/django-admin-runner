@@ -19,7 +19,7 @@
   <p><strong>{% trans "Group" %}:</strong> {{ entry.group }}</p>
   {% endif %}
 
-  <form method="post">
+  <form method="post" enctype="multipart/form-data">
     {% csrf_token %}
     {% if form.fields %}
       <fieldset class="module aligned">

@@ -17,6 +17,7 @@ def register_command(
     params: list | None = None,
     exclude_params: list | None = None,
     models: list | None = None,
+    file_params: list | None = None,
 ):
     """
     Decorator to register a management command with the admin runner.
@@ -35,6 +36,9 @@ def register_command(
         models: List of Django model classes. A "Run" link for this command will
             appear on each model's admin change-list page when
             ``CommandRunnerModelAdminMixin`` is used.
+        file_params: List of argument ``dest`` names that should render as a
+            combined file-upload + text-path field. The user can either upload a
+            file directly *or* type an absolute/relative path on the server.
     """
 
     def decorator(cls):
@@ -47,6 +51,7 @@ def register_command(
             "params": params,
             "exclude_params": list(exclude_params or []),
             "models": list(models or []),
+            "file_params": list(file_params or []),
             "command_class": cls,
             "app_label": app_label,
         }

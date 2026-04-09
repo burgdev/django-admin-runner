@@ -5,7 +5,7 @@ from django.core.management.base import BaseCommand
 from django_admin_runner import register_command
 
 
-@register_command(group="Import", params=["source", "dry_run", "limit"])
+@register_command(group="Import", params=["source", "dry_run", "limit"], file_params=["source"])
 class Command(BaseCommand):
     help = "Import books from a source file"
 

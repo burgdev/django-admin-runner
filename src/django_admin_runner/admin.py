@@ -177,7 +177,7 @@ class CommandExecutionAdmin(_ModelAdminBase):  # type: ignore[misc]
         FormClass = form_from_command(command_name)
 
         if request.method == "POST":
-            form = FormClass(request.POST)
+            form = FormClass(request.POST, request.FILES)
             if form.is_valid():
                 kwargs = {}
                 for k, v in form.cleaned_data.items():

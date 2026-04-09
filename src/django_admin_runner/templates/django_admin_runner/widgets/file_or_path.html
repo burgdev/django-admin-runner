@@ -1,0 +1,9 @@
+{% load i18n %}
+<div class="file-or-path-widget">
+  {% for subwidget in widget.subwidgets %}
+    {% if not forloop.first %}
+    <span class="file-or-path-or">{% trans "or enter a server-side path:" %}</span>
+    {% endif %}
+    {% include subwidget %}
+  {% endfor %}
+</div>

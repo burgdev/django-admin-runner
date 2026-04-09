@@ -13,3 +13,4 @@ htmlcov/
 .ruff_cache/
 site/
 *.sqlite3
+uv.lock

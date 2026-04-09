@@ -33,7 +33,22 @@ class CeleryCommandRunner(BaseCommandRunner):
         execution.backend = self.backend
         execution.save(update_fields=["backend"])
 
-        result = celery_task.delay(command_name, kwargs, execution.pk)
+        try:
+            result = celery_task.delay(command_name, kwargs, execution.pk)
+        except Exception as exc:
+            execution.status = "FAILED"
+            execution.stderr = f"Failed to enqueue task: {exc}"
+            execution.save(update_fields=["status", "stderr"])
+            return RunResult(
+                execution=execution,
+                redirect_url=reverse(
+                    "admin:django_admin_runner_commandexecution_change",
+                    args=[execution.pk],
+                ),
+                is_async=False,
+                backend=self.backend,
+                task_id="",
+            )
 
         execution.task_id = result.id
         execution.save(update_fields=["task_id"])

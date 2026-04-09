@@ -1,4 +1,11 @@
-.PHONY: init run worker beat
+.PHONY: help init run worker beat
+
+help:
+	@echo "Available targets:"
+	@echo "  init    - Set up the project (install deps, migrate, create superuser)"
+	@echo "  run     - Start the Django dev server on port 8765"
+	@echo "  worker  - Start the Celery worker"
+	@echo "  beat    - Start Celery Beat scheduler (with Django DB backend)"
 
 init:
 	uv sync

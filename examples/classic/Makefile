@@ -1,4 +1,9 @@
-.PHONY: init run
+.PHONY: help init run
+
+help:
+	@echo "Available targets:"
+	@echo "  init  - Set up the project (install deps, migrate, create superuser)"
+	@echo "  run   - Start the Django dev server on port 8765"
 
 init:
 	uv sync
