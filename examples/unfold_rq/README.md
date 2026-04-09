@@ -8,30 +8,32 @@ Valkey. Demonstrates how to implement a **custom runner** by subclassing
 
 - Docker (for Valkey)
 
-## Setup
+## Setup & run
 
 ```bash
 cd examples/unfold_rq
-uv sync
-docker compose up -d          # starts Valkey on port 6379
-uv run python manage.py migrate
-uv run python manage.py createsuperuser
+docker compose up -d   # start Valkey on port 6379
+make init              # install deps, migrate, create superuser (root/root)
+make run               # start Django dev server on port 8765
 ```
 
-## Run
-
-Open two terminals:
+Open a second terminal for the RQ worker:
 
 ```bash
-# Terminal 1 — Django dev server
-uv run python manage.py runserver
-
-# Terminal 2 — RQ worker
-uv run python manage.py rqworker
+make worker            # start RQ worker
 ```
 
-Visit http://localhost:8000/admin/ and navigate to
-**Admin Runner → Run Management Commands**.
+Visit <http://localhost:8765/admin/> (login: `root` / `root`) and navigate to
+**Run Commands** in the sidebar.
+
+## Available `make` targets
+
+```
+make          # show this help
+make init     # install deps, migrate, create superuser
+make run      # start Django dev server on port 8765
+make worker   # start RQ worker
+```
 
 ## Custom runner
 

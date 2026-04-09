@@ -3,22 +3,15 @@
 Plain Django admin with synchronous command execution via Django's built-in
 `ImmediateBackend`. No worker process or broker needed.
 
-## Setup
+## Setup & run
 
 ```bash
 cd examples/classic
-uv sync
-uv run python manage.py migrate
-uv run python manage.py createsuperuser
+make init   # install deps, migrate, create superuser (root/root)
+make run    # start dev server on port 8765
 ```
 
-## Run
-
-```bash
-uv run python manage.py runserver
-```
-
-Visit http://localhost:8000/admin/ and navigate to
+Visit <http://localhost:8765/admin/> (login: `root` / `root`) and navigate to
 **Admin Runner → Run Management Commands** to execute the example commands.
 
 ## What's included
@@ -30,3 +23,11 @@ Visit http://localhost:8000/admin/ and navigate to
     excluded from the run form via `exclude_params`
   - **Export Report** (`export_report`) — exports in CSV/JSON/XLSX format via a
     choice field; `--output-path` hidden from the form via `hidden=True`
+
+## Available `make` targets
+
+```
+make          # show this help
+make init     # install deps, migrate, create superuser
+make run      # start Django dev server on port 8765
+```

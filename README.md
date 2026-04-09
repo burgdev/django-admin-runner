@@ -15,11 +15,13 @@
 
 - **`@register_command` decorator** — register any management command with metadata
 - **Auto-generated forms** — argparse arguments become Django form fields automatically
+- **Widget & form customisation** — override widgets per-argument (`widget=` on `add_argument`), supply a custom `Form` class, or use per-parameter field overrides in the decorator
+- **Built-in file fields** — `FileOrPathField` (upload or server path), `FileField`, `ImageField`
 - **Pluggable runners** — Django Tasks (default), Celery, sync, or custom
 - **Execution log** — every run is stored as a `CommandExecution` record
 - **Permission control** — per-command permission requirements (superuser, Django perms, or a list)
 - **Model attachment** — show a "Run" button on any model's admin change-list via `models=[...]`
-- **Unfold support** — auto-detected, uses Unfold templates when available
+- **Unfold support** — auto-detected, uses Unfold templates and widgets when available
 
 ## Installation
 
@@ -62,6 +64,34 @@ class Command(BaseCommand):
 ```
 
 Visit `/admin/django_admin_runner/commandexecution/commands/` to run your commands.
+
+### Custom widgets
+
+Override how individual parameters render — right inside `add_arguments`:
+
+```python
+from django_admin_runner import FileOrPathField, register_command
+
+@register_command(group="Import")
+class Command(BaseCommand):
+    def add_arguments(self, parser):
+        # File upload OR server-side path text field
+        parser.add_argument("--source", widget=FileOrPathField(), default="data.csv")
+        # Swap to a textarea
+        parser.add_argument("--notes", widget=forms.Textarea(attrs={"rows": 3}))
+        # Image upload (requires Pillow)
+        parser.add_argument("--photo", widget=forms.ImageField(required=False))
+```
+
+Or provide a fully custom form class:
+
+```python
+@register_command(form_class=MyImportForm)
+class Command(BaseCommand):
+    ...
+```
+
+See the [Widget & form customisation](https://burgdev.github.io/django-admin-runner/widgets/) docs for the full reference.
 
 ## Development
 
