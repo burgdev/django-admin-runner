@@ -19,6 +19,7 @@ def register_command(
     models: list | None = None,
     widgets: dict | None = None,
     form_class=None,
+    display_name: str | None = None,
 ):
     """
     Decorator to register a management command with the admin runner.
@@ -50,6 +51,9 @@ def register_command(
             ``form_from_command`` returns it directly — all auto-generation,
             ``params``/``exclude_params`` filtering, and Unfold widget
             replacement are bypassed.
+        display_name: Human-readable name for the command. Defaults to the
+            command name with underscores replaced by spaces and title-cased
+            (e.g., ``"import_books"`` → ``"Import Books"``).
     """
 
     def decorator(cls):
@@ -66,6 +70,7 @@ def register_command(
             "form_class": form_class,
             "command_class": cls,
             "app_label": app_label,
+            "display_name": display_name or cmd_name.replace("_", " ").title(),
         }
         return cls
 
@@ -126,3 +131,8 @@ def autodiscover_commands() -> None:
                         module_name,
                         exc_info=True,
                     )
+
+    # Register Celery tasks for all discovered commands (no-op if Celery is not installed).
+    from .celery_tasks import _register_celery_tasks
+
+    _register_celery_tasks()

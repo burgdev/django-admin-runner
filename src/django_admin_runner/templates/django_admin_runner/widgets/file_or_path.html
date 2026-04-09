@@ -4,6 +4,6 @@
     {% if not forloop.first %}
     <span class="file-or-path-or">{% trans "or enter a server-side path:" %}</span>
     {% endif %}
-    {% include subwidget %}
+    {% include subwidget.template_name %}
   {% endfor %}
 </div>
