@@ -17,7 +17,8 @@ def register_command(
     params: list | None = None,
     exclude_params: list | None = None,
     models: list | None = None,
-    file_params: list | None = None,
+    widgets: dict | None = None,
+    form_class=None,
 ):
     """
     Decorator to register a management command with the admin runner.
@@ -36,9 +37,19 @@ def register_command(
         models: List of Django model classes. A "Run" link for this command will
             appear on each model's admin change-list page when
             ``CommandRunnerModelAdminMixin`` is used.
-        file_params: List of argument ``dest`` names that should render as a
-            combined file-upload + text-path field. The user can either upload a
-            file directly *or* type an absolute/relative path on the server.
+        widgets: Per-parameter widget or field overrides. Keys are argument
+            ``dest`` names; values are either a
+            :class:`~django.forms.Widget` instance (swaps the widget on the
+            auto-detected field) or a :class:`~django.forms.Field` instance
+            (replaces the auto-detected field entirely, e.g.
+            ``FileOrPathField()``, ``forms.FileField()``,
+            ``forms.ImageField()``).  The ``widget=`` kwarg on ``add_argument``
+            takes priority over this dict.  Unfold widget auto-replacement is
+            skipped for parameters that have an entry here.
+        form_class: A fully custom :class:`~django.forms.Form` class. When set,
+            ``form_from_command`` returns it directly — all auto-generation,
+            ``params``/``exclude_params`` filtering, and Unfold widget
+            replacement are bypassed.
     """
 
     def decorator(cls):
@@ -51,7 +62,8 @@ def register_command(
             "params": params,
             "exclude_params": list(exclude_params or []),
             "models": list(models or []),
-            "file_params": list(file_params or []),
+            "widgets": dict(widgets or {}),
+            "form_class": form_class,
             "command_class": cls,
             "app_label": app_label,
         }
