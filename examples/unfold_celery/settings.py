@@ -116,31 +116,35 @@ UNFOLD = {
                 ],
             },
             {
-                "title": "Periodic Tasks",
+                "title": "Celery Tasks",
                 "separator": True,
                 "collapsible": True,
                 "items": [
                     {
                         "title": "Periodic tasks",
-                        "icon": "schedule",
+                        "icon": "task",
                         "link": reverse_lazy("admin:django_celery_beat_periodictask_changelist"),
                     },
                     {
                         "title": "Intervals",
+                        "icon": "timer",
                         "link": reverse_lazy(
                             "admin:django_celery_beat_intervalschedule_changelist"
                         ),
                     },
                     {
                         "title": "Crontabs",
+                        "icon": "update",
                         "link": reverse_lazy("admin:django_celery_beat_crontabschedule_changelist"),
                     },
                     {
                         "title": "Solar events",
+                        "icon": "event",
                         "link": reverse_lazy("admin:django_celery_beat_solarschedule_changelist"),
                     },
                     {
                         "title": "Clocked",
+                        "icon": "hourglass_bottom",
                         "link": reverse_lazy("admin:django_celery_beat_clockedschedule_changelist"),
                     },
                 ],
@@ -152,10 +156,12 @@ UNFOLD = {
                 "items": [
                     {
                         "title": "Task results",
+                        "icon": "checklist_rtl",
                         "link": reverse_lazy("admin:django_celery_results_taskresult_changelist"),
                     },
                     {
                         "title": "Group results",
+                        "icon": "playlist_add_check",
                         "link": reverse_lazy("admin:django_celery_results_groupresult_changelist"),
                     },
                 ],

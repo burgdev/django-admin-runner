@@ -38,8 +38,9 @@ requires-dist = [
     { name = "celery", marker = "extra == 'celery'", specifier = ">=5.3" },
     { name = "django", specifier = ">=6.0" },
     { name = "django-unfold", marker = "extra == 'unfold'", specifier = ">=0.40" },
+    { name = "rich", marker = "extra == 'rich'", specifier = ">=13.0" },
 ]
-provides-extras = ["celery", "unfold"]
+provides-extras = ["celery", "unfold", "rich"]
 
 [package.metadata.requires-dev]
 dev = [
