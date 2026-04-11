@@ -65,6 +65,8 @@ DATABASES = {
 }
 
 STATIC_URL = "/static/"
+MEDIA_URL = "/media/"
+MEDIA_ROOT = os.path.join(BASE_DIR, "media")
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Celery
@@ -74,6 +76,7 @@ CELERY_RESULT_EXTENDED = True
 
 ADMIN_RUNNER_BACKEND = "celery"
 ADMIN_RUNNER_UPLOAD_PATH = os.path.join(BASE_DIR, "uploads")
+ADMIN_RUNNER_BASE_URL = "http://127.0.0.1:8765"
 
 UNFOLD = {
     "SIDEBAR": {

@@ -3,7 +3,7 @@ import csv
 
 from django.core.management.base import BaseCommand
 
-from django_admin_runner import FileOrPathField, register_command
+from django_admin_runner import FileOrPathField, register_command, set_result_html
 
 
 @register_command(group="Import", params=["source", "dry_run", "limit"])
@@ -32,10 +32,12 @@ class Command(BaseCommand):
             self.stderr.write(f"File not found: {source}")
             return
 
+        rows_imported = []
+        skipped = 0
+
         with fh:
             reader = csv.DictReader(fh)
             created = 0
-            skipped = 0
 
             for row in reader:
                 title = row.get("title", "").strip()
@@ -57,6 +59,7 @@ class Command(BaseCommand):
                             "isbn": row.get("isbn", "").strip(),
                         },
                     )
+                rows_imported.append((title, author))
                 created += 1
 
                 if limit and created >= limit:
@@ -64,3 +67,15 @@ class Command(BaseCommand):
 
         action = "Would import" if dry_run else "Imported"
         self.stdout.write(self.style.SUCCESS(f"{action} {created} book(s), skipped {skipped}"))
+
+        # Generate HTML summary table
+        table_rows = "".join(
+            f"<tr><td>{title}</td><td>{author}</td></tr>" for title, author in rows_imported
+        )
+        set_result_html(
+            f"<h2>{action} {created} book(s), skipped {skipped}</h2>"
+            f'<table border="1" cellpadding="4" cellspacing="0">'
+            f"<tr><th>Title</th><th>Author</th></tr>"
+            f"{table_rows}"
+            f"</table>"
+        )

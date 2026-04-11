@@ -17,6 +17,7 @@ class CommandExecution(models.Model):
     )
     stdout = models.TextField(blank=True)
     stderr = models.TextField(blank=True)
+    result_html = models.TextField(blank=True)
     kwargs = models.JSONField(default=dict)
     triggered_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,

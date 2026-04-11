@@ -168,3 +168,63 @@ class TestCommandExecutionAdminQueryset:
         qs = response.context["cl"].queryset
         assert qs.count() == 1
         assert qs.first().command_name == "mine"
+
+
+# ---------------------------------------------------------------------------
+# Result view
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestResultView:
+    def test_result_view_with_result_html(self, admin_client, superuser):
+        execution = CommandExecution.objects.create(
+            command_name="simple_command",
+            triggered_by=superuser,
+            status="SUCCESS",
+            result_html="<h1>Report</h1><p>Done</p>",
+        )
+        url = reverse("admin:django_admin_runner_commandexecution_result", args=[execution.pk])
+        response = admin_client.get(url)
+        assert response.status_code == 200
+        content = response.content.decode()
+        assert "<h1>Report</h1>" in content
+
+    def test_result_view_without_result_html_shows_stdout(self, admin_client, superuser):
+        execution = CommandExecution.objects.create(
+            command_name="simple_command",
+            triggered_by=superuser,
+            status="SUCCESS",
+            stdout="Hello world output",
+        )
+        url = reverse("admin:django_admin_runner_commandexecution_result", args=[execution.pk])
+        response = admin_client.get(url)
+        assert response.status_code == 200
+        content = response.content.decode()
+        assert "Hello world output" in content
+
+    def test_result_view_404_for_invalid_pk(self, admin_client):
+        url = reverse("admin:django_admin_runner_commandexecution_result", args=[99999])
+        response = admin_client.get(url)
+        assert response.status_code == 404
+
+    def test_result_view_permission_denied_for_other_user(self, client, db):
+        from django.contrib.auth.models import Permission
+        from django.contrib.contenttypes.models import ContentType
+
+        user = User.objects.create_user("limited", "l@e.com", "pw", is_staff=True)
+        other = User.objects.create_superuser("admin2", "a2@e.com", "pw")
+        ct = ContentType.objects.get_for_model(CommandExecution)
+        perm = Permission.objects.get(content_type=ct, codename="view_commandexecution")
+        user.user_permissions.add(perm)
+
+        execution = CommandExecution.objects.create(
+            command_name="cmd",
+            triggered_by=other,
+            result_html="<p>Secret</p>",
+        )
+
+        client.force_login(user)
+        url = reverse("admin:django_admin_runner_commandexecution_result", args=[execution.pk])
+        response = client.get(url)
+        assert response.status_code == 404  # get_queryset filters it out

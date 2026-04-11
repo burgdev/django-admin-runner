@@ -1,0 +1,23 @@
+{% load i18n %}
+<div class="file-or-path-widget flex flex-row items-center gap-3">
+  {% for widget in widget.subwidgets %}
+    {% if forloop.first %}
+      {% if upload_enabled %}
+      <div class="flex flex-none items-center leading-none">
+        <div class="opacity-0 overflow-hidden w-[0px]">
+          {% include widget.template_name %}
+        </div>
+        <label for="{{ widget.attrs.id }}" class="cursor-pointer border rounded-default px-3 py-2 text-sm font-medium bg-white dark:bg-base-900 border-base-200 dark:border-base-700 text-font-default-light dark:text-font-default-dark hover:bg-base-50 dark:hover:bg-base-800 transition-colors">
+          <span class="material-symbols-outlined align-middle mr-1">file_upload</span>
+          {% trans "Choose file" %}
+        </label>
+      </div>
+      <span class="text-xs text-font-default-light dark:text-font-default-dark">{% trans "or path:" %}</span>
+      {% endif %}
+    {% else %}
+      <div class="grow">
+        {% include widget.template_name %}
+      </div>
+    {% endif %}
+  {% endfor %}
+</div>

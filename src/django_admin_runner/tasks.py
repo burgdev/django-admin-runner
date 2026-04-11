@@ -47,6 +47,7 @@ def execute_command(command_name: str, kwargs: dict, execution_pk: int) -> None:
     """
     import logging
 
+    from .context import _clear_execution_context, _set_execution_context
     from .hooks import HookContext, get_hooks
     from .models import CommandExecution
 
@@ -60,43 +61,74 @@ def execute_command(command_name: str, kwargs: dict, execution_pk: int) -> None:
     ctx = HookContext()
     hooks = get_hooks()
 
-    # Setup hooks
-    for hook in hooks:
-        hook.setup(command_name, kwargs, execution, ctx)
+    # Activate execution context (contextvars)
+    exec_ctx = _set_execution_context()
 
-    stdout_buf = _TtyStringIO()
-    stderr_buf = _TtyStringIO()
     try:
-        # _hidden_aware_argparse strips custom kwargs (widget=, hidden=)
-        # that commands may pass to add_argument but argparse doesn't understand.
-        from .forms import _hidden_aware_argparse
-
-        with _hidden_aware_argparse():
-            call_command(
-                command_name,
-                stdout=stdout_buf,
-                stderr=stderr_buf,
-                force_color=True,
-                **kwargs,
-            )
-        execution.status = CommandExecution.Status.SUCCESS
-    except Exception:
-        execution.status = CommandExecution.Status.FAILED
-        execution.stderr = _rich_traceback() or traceback.format_exc()
-    finally:
-        execution.stdout = stdout_buf.getvalue()
-        if not execution.stderr:
-            execution.stderr = stderr_buf.getvalue()
-        execution.finished_at = now()
-        execution.save(update_fields=["status", "stdout", "stderr", "finished_at"])
-
-        # Teardown hooks (reversed order, non-fatal)
-        for hook in reversed(hooks):
+        # Setup hooks (forward order)
+        for hook in hooks:
             try:
-                hook.teardown(command_name, kwargs, execution, ctx)
+                hook.setup(command_name, kwargs, execution, ctx)
             except Exception:
                 logger.exception(
-                    "Error in hook %s.teardown() for command %s",
+                    "Error in hook %s.setup() for command %s",
                     type(hook).__qualname__,
                     command_name,
                 )
+
+        stdout_buf = _TtyStringIO()
+        stderr_buf = _TtyStringIO()
+        try:
+            # _hidden_aware_argparse strips custom kwargs (widget=, hidden=)
+            # that commands may pass to add_argument but argparse doesn't understand.
+            from .forms import _hidden_aware_argparse
+
+            with _hidden_aware_argparse():
+                call_command(
+                    command_name,
+                    stdout=stdout_buf,
+                    stderr=stderr_buf,
+                    force_color=True,
+                    **kwargs,
+                )
+            execution.status = CommandExecution.Status.SUCCESS
+        except Exception:
+            execution.status = CommandExecution.Status.FAILED
+            execution.stderr = _rich_traceback() or traceback.format_exc()
+        finally:
+            execution.stdout = stdout_buf.getvalue()
+            if not execution.stderr:
+                execution.stderr = stderr_buf.getvalue()
+            execution.finished_at = now()
+
+        # Pre-save hooks (forward order)
+        for hook in hooks:
+            try:
+                hook.pre_save(command_name, kwargs, execution, ctx)
+            except Exception:
+                logger.exception(
+                    "Error in hook %s.pre_save() for command %s",
+                    type(hook).__qualname__,
+                    command_name,
+                )
+
+        # Collect result_html from execution context
+        result_html = exec_ctx.get("result_html")
+        if result_html is not None:
+            execution.result_html = str(result_html)
+
+        # Save execution record
+        execution.save(update_fields=["status", "stdout", "stderr", "result_html", "finished_at"])
+
+        # Post-save hooks (reversed order, non-fatal)
+        for hook in reversed(hooks):
+            try:
+                hook.post_save(command_name, kwargs, execution, ctx)
+            except Exception:
+                logger.exception(
+                    "Error in hook %s.post_save() for command %s",
+                    type(hook).__qualname__,
+                    command_name,
+                )
+    finally:
+        _clear_execution_context()

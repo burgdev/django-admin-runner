@@ -1,0 +1,33 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block title %}{{ title }} | {{ site_title|default:_('Django site admin') }}{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% trans "Home" %}</a>
+  &rsaquo; <a href="{% url 'admin:django_admin_runner_commandexecution_changelist' %}">Command Executions</a>
+  &rsaquo; <a href="{{ change_url }}">{{ execution.command_name }}</a>
+  &rsaquo; Result
+</div>
+{% endblock %}
+
+{% block extrastyle %}{{ block.super }}<link rel="stylesheet" href="{% static 'django_admin_runner/ansi-output.css' %}">{% endblock %}
+
+{% block content %}
+<div id="content-main">
+  <h1>{{ title }}</h1>
+
+  <ul class="object-tools">
+    <li>
+      <a href="{{ change_url }}">{% trans "Back to detail" %}</a>
+    </li>
+  </ul>
+
+  <div class="module">
+    <div style="padding: 1em;">
+      {{ content }}
+    </div>
+  </div>
+</div>
+{% endblock %}
