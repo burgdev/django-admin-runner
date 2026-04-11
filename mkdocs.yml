@@ -111,12 +111,12 @@ watch:
 
 nav:
   - Getting Started:
-    - index.md
-    - installation.md
-    - quickstart.md
+      - index.md
+      - installation.md
+      - quickstart.md
   - Reference:
-    - decorator.md
-    - runners.md
-    - custom-runner.md
-    - admin-themes.md
+      - decorator.md
+      - runners.md
+      - custom-runner.md
+      - admin-themes.md
   - Changelog: changelog.md

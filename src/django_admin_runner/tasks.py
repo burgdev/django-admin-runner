@@ -45,23 +45,40 @@ def execute_command(command_name: str, kwargs: dict, execution_pk: int) -> None:
     decorator so that every runner (sync, Django Tasks, Celery, RQ, …) can
     wrap or call it as needed.
     """
+    import logging
+
+    from .hooks import HookContext, get_hooks
     from .models import CommandExecution
+
+    logger = logging.getLogger(__name__)
 
     execution = CommandExecution.objects.get(pk=execution_pk)
     execution.status = CommandExecution.Status.RUNNING
     execution.started_at = now()
     execution.save(update_fields=["status", "started_at"])
 
+    ctx = HookContext()
+    hooks = get_hooks()
+
+    # Setup hooks
+    for hook in hooks:
+        hook.setup(command_name, kwargs, execution, ctx)
+
     stdout_buf = _TtyStringIO()
     stderr_buf = _TtyStringIO()
     try:
-        call_command(
-            command_name,
-            stdout=stdout_buf,
-            stderr=stderr_buf,
-            force_color=True,
-            **kwargs,
-        )
+        # _hidden_aware_argparse strips custom kwargs (widget=, hidden=)
+        # that commands may pass to add_argument but argparse doesn't understand.
+        from .forms import _hidden_aware_argparse
+
+        with _hidden_aware_argparse():
+            call_command(
+                command_name,
+                stdout=stdout_buf,
+                stderr=stderr_buf,
+                force_color=True,
+                **kwargs,
+            )
         execution.status = CommandExecution.Status.SUCCESS
     except Exception:
         execution.status = CommandExecution.Status.FAILED
@@ -72,3 +89,14 @@ def execute_command(command_name: str, kwargs: dict, execution_pk: int) -> None:
             execution.stderr = stderr_buf.getvalue()
         execution.finished_at = now()
         execution.save(update_fields=["status", "stdout", "stderr", "finished_at"])
+
+        # Teardown hooks (reversed order, non-fatal)
+        for hook in reversed(hooks):
+            try:
+                hook.teardown(command_name, kwargs, execution, ctx)
+            except Exception:
+                logger.exception(
+                    "Error in hook %s.teardown() for command %s",
+                    type(hook).__qualname__,
+                    command_name,
+                )

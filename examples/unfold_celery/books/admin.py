@@ -25,11 +25,23 @@ from django_celery_beat.models import (
     PeriodicTask,
     SolarSchedule,
 )
-from django_celery_results.models import TaskResult, GroupResult
-from django_celery_results.admin import TaskResultAdmin, GroupResultAdmin
-
+from django_celery_results.admin import GroupResultAdmin, TaskResultAdmin
+from django_celery_results.models import GroupResult, TaskResult
 from unfold.admin import ModelAdmin
 from unfold.forms import AdminPasswordChangeForm, UserChangeForm, UserCreationForm
+
+from .models import Book
+
+# ---------------------------------------------------------------------------
+# Book
+# ---------------------------------------------------------------------------
+
+
+@admin.register(Book)
+class BookAdmin(ModelAdmin):
+    list_display = ["title", "author", "published_date", "isbn"]
+    search_fields = ["title", "author", "isbn"]
+
 
 # ---------------------------------------------------------------------------
 # User & Group — Unfold-styled versions
@@ -93,10 +105,10 @@ for _model in [TaskResult, GroupResult]:
 
 
 @admin.register(TaskResult)
-class UnfoldPeriodicTaskAdmin(TaskResultAdmin, ModelAdmin):
+class UnfoldTaskResultAdmin(TaskResultAdmin, ModelAdmin):
     pass
 
 
 @admin.register(GroupResult)
-class UnfoldPeriodicTaskAdmin(GroupResultAdmin, ModelAdmin):
+class UnfoldGroupResultAdmin(GroupResultAdmin, ModelAdmin):
     pass

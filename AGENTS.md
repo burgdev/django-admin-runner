@@ -8,12 +8,14 @@ Django package for running management commands from the Django admin interface. 
 
 - Python >=3.12, Django >=6.0
 - Build: hatchling
-- Package manager: uv
-- Task runner: just (`just help` for commands)
-- Linting: ruff + pre-commit
-- Type checking: pyright
-- Tests: pytest + pytest-django
-- Docs: mkdocs
+- Package manager: `uv`
+- Task runner: `just` (`just help` for commands)
+- Linting: `ruff` + pre-commit
+- Type checking: `pyright`
+- Tests: `pytest` + `pytest-django`
+- Docs: `mkdocs`
+
+NOTE: Run all python commands with `uv`!
 
 ## Common Commands
 

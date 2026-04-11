@@ -73,10 +73,23 @@ CELERY_RESULT_BACKEND = "django-db"
 CELERY_RESULT_EXTENDED = True
 
 ADMIN_RUNNER_BACKEND = "celery"
+ADMIN_RUNNER_UPLOAD_PATH = os.path.join(BASE_DIR, "uploads")
 
 UNFOLD = {
     "SIDEBAR": {
         "navigation": [
+            {
+                "title": "Models",
+                "separator": False,
+                "collapsible": False,
+                "items": [
+                    {
+                        "title": "Books",
+                        "icon": "book",
+                        "link": reverse_lazy("admin:books_book_changelist"),
+                    },
+                ],
+            },
             {
                 "title": "Command Runner",
                 "separator": False,
