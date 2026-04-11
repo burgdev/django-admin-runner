@@ -175,6 +175,10 @@ def _apply_unfold_widget(field: forms.Field) -> None:
         field.widget = UnfoldBooleanWidget()
     elif isinstance(field, forms.ChoiceField):
         field.widget = UnfoldAdminSelectWidget()
+        # Re-sync choices from field to widget: replacing the widget above
+        # creates a fresh instance with choices=[], so we must push the
+        # field's choices back down via the setter.
+        field.choices = field.choices
     elif isinstance(field, forms.IntegerField):
         field.widget = UnfoldAdminIntegerFieldWidget()
     elif isinstance(field, forms.CharField):

@@ -194,6 +194,34 @@ class TestFormFromCommand:
         assert "filename" in FormClass().fields
         assert "count" in FormClass().fields
 
+    # ------------------------------------------------------------------
+    # Unfold widget replacement
+    # ------------------------------------------------------------------
+
+    def test_choices_survive_unfold_widget_replacement(self):
+        """Choices must be synced to the new widget after Unfold replaces it."""
+        from unittest.mock import MagicMock, patch
+
+        # Build fake unfold.widgets module with mock widget classes
+        unfold_widgets = MagicMock()
+        mock_select_widget = forms.Select()  # fresh widget with choices=[]
+        unfold_widgets.UnfoldAdminSelectWidget.return_value = mock_select_widget
+        unfold_widgets.UnfoldAdminTextInputWidget = forms.TextInput
+        unfold_widgets.UnfoldAdminIntegerFieldWidget = forms.NumberInput
+        unfold_widgets.UnfoldBooleanWidget = forms.CheckboxInput
+
+        with (
+            patch("django_admin_runner.admin_compat.is_unfold_installed", return_value=True),
+            patch.dict("sys.modules", {"unfold.widgets": unfold_widgets}),
+        ):
+            FormClass = form_from_command("param_command")
+
+        field = FormClass().fields["mode"]
+        assert isinstance(field, forms.ChoiceField)
+        choice_values = [v for v, _ in field.widget.choices]
+        assert "fast" in choice_values
+        assert "slow" in choice_values
+
 
 # ---------------------------------------------------------------------------
 # FileOrPathWidget rendering
