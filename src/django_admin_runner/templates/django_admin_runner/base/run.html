@@ -6,10 +6,12 @@
 {% block breadcrumbs %}
 <div class="breadcrumbs">
   <a href="{% url 'admin:index' %}">{% trans "Home" %}</a>
-  &rsaquo; <a href="{% url 'admin:django_admin_runner_command_list' %}">{% trans "Run Commands" %}</a>
+  &rsaquo; <a href="{% url 'admin:django_admin_runner_registeredcommand_changelist' %}">{% trans "Commands" %}</a>
   &rsaquo; {{ command_name }}
 </div>
 {% endblock %}
+
+{% block content_title %}{% endblock %}
 
 {% block content %}
 <div id="content-main">
@@ -46,7 +48,7 @@
 
     <div class="submit-row">
       <input type="submit" value="{% trans "Run command" %}" class="default">
-      <a href="{% url 'admin:django_admin_runner_command_list' %}">{% trans "Cancel" %}</a>
+      <a href="{% url 'admin:django_admin_runner_registeredcommand_changelist' %}">{% trans "Cancel" %}</a>
     </div>
   </form>
 </div>

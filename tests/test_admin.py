@@ -8,54 +8,6 @@ User = get_user_model()
 
 
 # ---------------------------------------------------------------------------
-# List view
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.django_db
-class TestCommandListView:
-    def test_list_view_ok_for_superuser(self, admin_client):
-        url = reverse("admin:django_admin_runner_command_list")
-        response = admin_client.get(url)
-        assert response.status_code == 200
-
-    def test_list_view_redirects_anonymous(self, client):
-        url = reverse("admin:django_admin_runner_command_list")
-        response = client.get(url)
-        assert response.status_code == 302
-
-    def test_list_view_grouped_commands_in_context(self, admin_client):
-        url = reverse("admin:django_admin_runner_command_list")
-        response = admin_client.get(url)
-        assert "grouped_commands" in response.context
-        grouped = response.context["grouped_commands"]
-        # All test commands are in group "Test"
-        assert "Test" in grouped
-
-    def test_list_view_shows_registered_commands(self, admin_client):
-        url = reverse("admin:django_admin_runner_command_list")
-        response = admin_client.get(url)
-        content = response.content.decode()
-        assert "simple_command" in content
-
-    def test_list_view_superuser_sees_all(self, admin_client):
-        url = reverse("admin:django_admin_runner_command_list")
-        response = admin_client.get(url)
-        grouped = response.context["grouped_commands"]
-        all_names = [cmd["name"] for cmds in grouped.values() for cmd in cmds]
-        assert "simple_command" in all_names
-
-    def test_list_view_hides_superuser_commands_from_staff(self, staff_client):
-        # All test commands use default permission="superuser" so a staff-only
-        # user should see nothing (unless they are also superuser)
-        url = reverse("admin:django_admin_runner_command_list")
-        response = staff_client.get(url)
-        assert response.status_code == 200
-        grouped = response.context["grouped_commands"]
-        assert len(grouped) == 0
-
-
-# ---------------------------------------------------------------------------
 # Run view — GET
 # ---------------------------------------------------------------------------
 

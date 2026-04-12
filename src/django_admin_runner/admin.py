@@ -12,7 +12,7 @@ from ._ansi import ansi_to_html as _convert_ansi
 from ._ansi import linkify_urls as _linkify
 from .admin_compat import get_model_admin_base, get_template, is_unfold_installed
 from .forms import form_from_command
-from .models import CommandExecution
+from .models import CommandExecution, RegisteredCommand
 from .registry import _registry, has_permission
 from .runners import get_runner
 
@@ -62,6 +62,90 @@ class CommandRunnerModelAdminMixin:
 # ---------------------------------------------------------------------------
 
 _ModelAdminBase = get_model_admin_base()
+
+
+class ActiveListFilter(admin.SimpleListFilter):
+    title = "active"
+    parameter_name = "active"
+
+    def lookups(self, request, model_admin):
+        return [("1", "Yes"), ("0", "No")]
+
+    def queryset(self, request, queryset):
+        if self.value() == "0":
+            return queryset.filter(active=False)
+        return queryset.filter(active=True)
+
+
+@admin.register(RegisteredCommand)
+class RegisteredCommandAdmin(_ModelAdminBase):  # type: ignore[misc]
+    list_display = [
+        "name_link",
+        "group",
+        "active",
+        "updated_at",
+        "buttons",
+    ]
+    list_display_links = None
+    search_fields = ["name", "display_name"]
+    list_filter = [ActiveListFilter, "group"]
+    ordering = ["group", "name"]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+    def changelist_view(self, request, extra_context=None):
+        # Default the active filter to "Yes" when no active param is present
+        if "active" not in request.GET:
+            qp = request.GET.copy()
+            qp["active"] = "1"
+            return redirect(f"{request.path}?{qp.urlencode()}")
+        return super().changelist_view(request, extra_context=extra_context)
+
+    @admin.display(description="Name", ordering="name")
+    def name_link(self, obj: RegisteredCommand) -> SafeString:
+        name_html = f"<strong>{obj.display_name}</strong>"
+        desc_html = ""
+        if obj.description:
+            desc_html = (
+                f'<br><span style="color:var(--body-quiet-color,#666);'
+                f"max-width:300px;display:inline-block;overflow:hidden;"
+                f"text-overflow:ellipsis;white-space:nowrap;"
+                f'font-size:12px;">{obj.description}</span>'
+            )
+        if obj.active:
+            run_url = reverse("admin:django_admin_runner_command_run", args=[obj.name])
+            return cast(SafeString, mark_safe(f'<a href="{run_url}">{name_html}</a>{desc_html}'))
+        return cast(SafeString, mark_safe(f"{name_html}{desc_html}"))
+
+    @admin.display(description="")
+    def buttons(self, obj: RegisteredCommand) -> SafeString:
+        parts: list[str] = []
+        if obj.active:
+            run_url = reverse("admin:django_admin_runner_command_run", args=[obj.name])
+            parts.append(
+                f'<a href="{run_url}" '
+                f'style="display:inline-block;padding:4px 10px;border-radius:4px;'
+                f"font-size:11px;font-weight:600;color:#fff;"
+                f'background:#28a745;text-decoration:none;">Run</a>'
+            )
+        history_url = (
+            reverse("admin:django_admin_runner_commandexecution_changelist")
+            + f"?command_name={obj.name}"
+        )
+        parts.append(
+            f'<a href="{history_url}" '
+            f'style="display:inline-block;padding:4px 10px;border-radius:4px;'
+            f"font-size:11px;font-weight:600;color:#fff;"
+            f'background:#0d6efd;text-decoration:none;">History</a>'
+        )
+        return cast(SafeString, mark_safe(" ".join(parts)))
 
 
 @admin.register(CommandExecution)
@@ -229,11 +313,6 @@ class CommandExecutionAdmin(_ModelAdminBase):  # type: ignore[misc]
         urls = super().get_urls()
         custom = [
             path(
-                "commands/",
-                self.admin_site.admin_view(self._command_list_view),
-                name="django_admin_runner_command_list",
-            ),
-            path(
                 "commands/<str:command_name>/run/",
                 self.admin_site.admin_view(self._command_run_view),
                 name="django_admin_runner_command_run",
@@ -325,20 +404,6 @@ class CommandExecutionAdmin(_ModelAdminBase):  # type: ignore[misc]
             f"Traceback: {execution.command_name}",
             content,
         )
-
-    def _command_list_view(self, request):
-        visible = [entry for entry in _registry.values() if has_permission(request.user, entry)]
-        grouped: dict[str, list] = {}
-        for entry in sorted(visible, key=lambda e: (e["group"], e["name"])):
-            grouped.setdefault(entry["group"], []).append(entry)
-
-        context = {
-            **self.admin_site.each_context(request),
-            "title": "Run Management Commands",
-            "grouped_commands": grouped,
-            "opts": self.model._meta,
-        }
-        return render(request, get_template("list"), context)
 
     def _command_run_view(self, request, command_name: str):
         if command_name not in _registry:
