@@ -29,7 +29,7 @@
           <tr class="{% cycle 'row1' 'row2' %}">
             <td><a href="{% url 'admin:django_admin_runner_command_run' cmd.name %}"><strong>{{ cmd.name }}</strong></a></td>
             <td style="color: var(--body-quiet-color, #666);">{{ cmd.command_class.help|default:"" }}</td>
-            <td style="text-align: right; white-space: nowrap;">
+            <td style="text-align: right; white-space: nowrap; display: flex; gap: 6px; justify-content: flex-end;">
               <a href="{% url 'admin:django_admin_runner_command_run' cmd.name %}" class="button">
                 {% trans "Run" %}
               </a>
