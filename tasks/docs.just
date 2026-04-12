@@ -4,12 +4,12 @@ import 'core.just'
 [default]
 serve port='8088':
     @header "Serving docs at localhost:{{port}}..."
-    uv run --group docs mkdocs serve --dev-addr localhost:{{port}}
+    uv run --group docs zensical serve --dev-addr localhost:{{port}}
 
 # 📦 Build docs
 build:
     @header "Building docs..."
-    uv run --group docs mkdocs build
+    uv run --group docs zensical build
     @success "🏁 Docs built in 'site/'."
 
 # ❓ Show help

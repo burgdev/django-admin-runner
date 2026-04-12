@@ -35,13 +35,16 @@ class CommandRunnerModelAdminMixin:
     """Mix into any ``ModelAdmin`` to show "Run" links for commands registered with
     ``models=[ThisModel]``.
 
-    Example::
+    Example:
 
-        from django_admin_runner.admin import CommandRunnerModelAdminMixin
+    ```python
+    from django.contrib import admin
+    from django_admin_runner.admin import CommandRunnerModelAdminMixin
 
-        @admin.register(Book)
-        class BookAdmin(CommandRunnerModelAdminMixin, admin.ModelAdmin):
-            ...
+    @admin.register(Book)
+    class BookAdmin(CommandRunnerModelAdminMixin, admin.ModelAdmin):
+        ...
+    ```
     """
 
     model: type[_models.Model]  # provided by the ModelAdmin subclass

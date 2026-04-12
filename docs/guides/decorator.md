@@ -13,6 +13,7 @@ from django_admin_runner import register_command
     models=None,
     widgets=None,
     form_class=None,
+    display_name=None,
 )
 class Command(BaseCommand):
     ...
@@ -113,6 +114,17 @@ class ImportForm(forms.Form):
         return v
 
 @register_command(form_class=ImportForm)
+class Command(BaseCommand):
+    ...
+```
+
+### `display_name`
+Human-readable name shown in the admin command list. Defaults to the command
+name with underscores replaced by spaces and title-cased (e.g. `"import_books"`
+becomes `"Import Books"`).
+
+```python
+@register_command(display_name="Import Books from CSV")
 class Command(BaseCommand):
     ...
 ```

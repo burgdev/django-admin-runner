@@ -5,6 +5,8 @@ repo_name: burgdev/django-admin-runner
 
 theme:
   name: material
+  logo: assets/icon.svg
+  favicon: assets/icon.png
   palette:
     - media: "(prefers-color-scheme)"
       toggle:
@@ -109,14 +111,35 @@ watch:
   - README.md
   - docs/
 
+extra_css:
+  - stylesheets/extra.css
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/burgdev/django-admin-runner
+
 nav:
   - Getting Started:
-      - index.md
-      - installation.md
-      - quickstart.md
-  - Reference:
-      - decorator.md
-      - runners.md
-      - custom-runner.md
-      - admin-themes.md
+      - getting-started/index.md
+      - getting-started/installation.md
+      - getting-started/quickstart.md
+  - Guides:
+      - guides/guides.md
+      - guides/decorator.md
+      - guides/runners.md
+      - guides/custom-runner.md
+      - guides/execution-context.md
+      - guides/hooks.md
+      - guides/admin-themes.md
+  - API Reference:
+      - api/api-reference.md
+      - api/register-command.md
+      - api/context.md
+      - api/forms.md
+      - api/hooks.md
+      - api/runners.md
+      - api/models.md
+      - api/admin.md
+  - Examples: examples.md
   - Changelog: changelog.md

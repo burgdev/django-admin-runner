@@ -39,8 +39,7 @@ dev = [
   "ruff>=0.8.2",
 ]
 docs = [
-  "mkdocs>=1.4.0",
-  "mkdocs-material>=9.5.49",
+  "zensical>=0.0.32",
   "mkdocs-open-in-new-tab>=1.0.8",
   "mkdocs-literate-nav>=0.6.1",
   "mkdocs-section-index>=0.3.9",
