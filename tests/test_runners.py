@@ -1,3 +1,7 @@
+import sys
+import unittest.mock
+from contextlib import contextmanager
+
 import pytest
 from django.contrib.auth import get_user_model
 from django.test import override_settings
@@ -188,3 +192,92 @@ def test_get_runner_dotted_path():
     ):
         runner = get_runner()
         assert runner.backend == "sync"
+
+
+# ---------------------------------------------------------------------------
+# DjangoQ2CommandRunner
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestDjangoQ2CommandRunner:
+    def test_backend_field_set(self, user, execution):
+        from django_admin_runner.runners.django_q2 import DjangoQ2CommandRunner
+
+        runner = DjangoQ2CommandRunner()
+        with _mock_django_q(return_value="abc-123"):
+            runner.run("simple_command", {}, user, execution)
+        execution.refresh_from_db()
+        assert execution.backend == "django-q2"
+
+    def test_task_id_populated(self, user, execution):
+        from django_admin_runner.runners.django_q2 import DjangoQ2CommandRunner
+
+        runner = DjangoQ2CommandRunner()
+        with _mock_django_q(return_value="abc-123"):
+            result = runner.run("simple_command", {}, user, execution)
+        assert result.task_id == "abc-123"
+        execution.refresh_from_db()
+        assert execution.task_id == "abc-123"
+
+    def test_is_async_true(self, user, execution):
+        from django_admin_runner.runners.django_q2 import DjangoQ2CommandRunner
+
+        runner = DjangoQ2CommandRunner()
+        with _mock_django_q(return_value="abc-123"):
+            result = runner.run("simple_command", {}, user, execution)
+        assert result.is_async is True
+
+    def test_enqueue_failure_marks_failed(self, user, execution):
+        from django_admin_runner.runners.django_q2 import DjangoQ2CommandRunner
+
+        runner = DjangoQ2CommandRunner()
+        with _mock_django_q(side_effect=Exception("broker down")):
+            result = runner.run("simple_command", {}, user, execution)
+        execution.refresh_from_db()
+        assert execution.status == CommandExecution.Status.FAILED
+        assert "broker down" in execution.stderr
+        assert result.is_async is False
+        assert result.task_id == ""
+
+
+# ---------------------------------------------------------------------------
+# get_runner factory — django-q2
+# ---------------------------------------------------------------------------
+
+
+def test_get_runner_django_q2():
+    with override_settings(ADMIN_RUNNER_BACKEND="django-q2"):
+        runner = get_runner()
+        from django_admin_runner.runners.django_q2 import DjangoQ2CommandRunner
+
+        assert isinstance(runner, DjangoQ2CommandRunner)
+        assert runner.backend == "django-q2"
+
+
+# ---------------------------------------------------------------------------
+# Helpers for mocking django_q (not installed in CI)
+# ---------------------------------------------------------------------------
+
+
+@contextmanager
+def _mock_django_q(**kwargs):
+    """Context manager that installs a fake ``django_q.tasks`` module in sys.modules."""
+    mock_async = unittest.mock.MagicMock(**kwargs)
+    mock_tasks = unittest.mock.MagicMock(async_task=mock_async)
+    mock_django_q = unittest.mock.MagicMock(tasks=mock_tasks)
+    saved = {}
+    for key, val in [
+        ("django_q", mock_django_q),
+        ("django_q.tasks", mock_tasks),
+    ]:
+        saved[key] = sys.modules.get(key)
+        sys.modules[key] = val
+    try:
+        yield mock_async
+    finally:
+        for key, orig in saved.items():
+            if orig is None:
+                del sys.modules[key]
+            else:
+                sys.modules[key] = orig

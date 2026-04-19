@@ -1,6 +1,6 @@
 # Examples
 
-Three complete example projects are included in the repository under `examples/`.
+Four complete example projects are included in the repository under `examples/`.
 Each demonstrates a different runner and integration pattern.
 
 === "Classic"
@@ -137,6 +137,54 @@ Each demonstrates a different runner and integration pattern.
             set_result_html(f"<h2>Imported {count} book(s)</h2>...")
     ```
 
+=== "Unfold + Django-Q2"
+
+    ## Unfold + Django-Q2 — Zero-dependency async
+
+    Async command execution using Django-Q2 with the Django ORM as the message
+    broker. No Docker, no Redis — just the database. Unfold admin theme for a
+    polished UI.
+
+    ### Architecture
+
+    ```mermaid
+    graph LR
+        A[Admin UI<br>Unfold theme] --> B[DjangoQ2CommandRunner]
+        B --> C[Django ORM broker]
+        C --> D[qcluster worker]
+        D --> E[Command executes]
+        E --> F[Result saved to DB]
+    ```
+
+    ### Setup
+
+    ```bash
+    cd examples/unfold_django_q2
+    make init    # install deps, migrate, create superuser
+    make run     # start Django on port 8766
+    make worker  # start qcluster (separate terminal)
+    ```
+
+    No Docker or external services required.
+
+    ### Key configuration
+
+    ```python
+    # settings.py
+    ADMIN_RUNNER_BACKEND = "django-q2"
+
+    Q_CLUSTER = {
+        "name": "DJANGORM",
+        "orm": "default",  # Django ORM as broker — no Redis needed
+    }
+    ```
+
+    ### Scheduled tasks
+
+    The example includes a custom `ScheduleAdmin` that replaces django-q2's
+    default admin with a dropdown listing all registered management commands,
+    making it easy to set up recurring commands without knowing dotted paths.
+
 === "Unfold + RQ"
 
     ## Unfold + RQ — Custom runner
@@ -217,12 +265,12 @@ Each demonstrates a different runner and integration pattern.
 
 ## Comparison
 
-| | Classic | Unfold + Celery | Unfold + RQ |
-|---|---|---|---|
-| **Runner** | DjangoTaskRunner (default) | CeleryCommandRunner | Custom RqCommandRunner |
-| **Execution** | Synchronous | Asynchronous | Asynchronous |
-| **Broker** | None | Valkey/Redis | Valkey/Redis |
-| **Worker** | None | Celery worker | RQ worker |
-| **Theme** | Plain Django admin | Unfold | Unfold |
-| **File uploads** | No | Yes (`FileOrPathField`) | No |
-| **Best for** | Dev / simple tasks | Production async | Learning custom runners |
+| | Classic | Unfold + Celery | Unfold + Django-Q2 | Unfold + RQ |
+|---|---|---|---|---|
+| **Runner** | DjangoTaskRunner (default) | CeleryCommandRunner | DjangoQ2CommandRunner | Custom RqCommandRunner |
+| **Execution** | Synchronous | Asynchronous | Asynchronous | Asynchronous |
+| **Broker** | None | Valkey/Redis | Django ORM | Valkey/Redis |
+| **Worker** | None | Celery worker | qcluster | RQ worker |
+| **Theme** | Plain Django admin | Unfold | Unfold | Unfold |
+| **File uploads** | No | Yes (`FileOrPathField`) | No | No |
+| **Best for** | Dev / simple tasks | Production async | Lightweight async | Learning custom runners |

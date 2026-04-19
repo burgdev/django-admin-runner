@@ -20,6 +20,7 @@ classifiers = [
 
 [project.optional-dependencies]
 celery = ["celery>=5.3"]
+django-q2 = ["django-q2>=1.5"]
 unfold = ["django-unfold>=0.40"]
 rich = ["rich>=13.0"]
 

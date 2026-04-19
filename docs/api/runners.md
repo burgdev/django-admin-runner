@@ -10,4 +10,6 @@
 
 ::: django_admin_runner.runners.celery.CeleryCommandRunner
 
+::: django_admin_runner.runners.django_q2.DjangoQ2CommandRunner
+
 ::: django_admin_runner.runners.get_runner

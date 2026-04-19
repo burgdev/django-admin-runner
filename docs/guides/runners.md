@@ -42,6 +42,20 @@ ADMIN_RUNNER_BACKEND = "celery"
 CELERY_BROKER_URL = "redis://localhost:6379/0"
 ```
 
+### `"django-q2"` — DjangoQ2CommandRunner
+
+Enqueues commands as django-q2 tasks. Uses Django's ORM as its message broker,
+so no external services (Redis, Docker) are needed. Requires `django-q2` installed.
+
+```python
+ADMIN_RUNNER_BACKEND = "django-q2"
+
+Q_CLUSTER = {
+    "name": "DJANGORM",
+    "orm": "default",  # uses Django's database as the broker
+}
+```
+
 ## RunResult
 
 Every `runner.run()` returns a `RunResult`:

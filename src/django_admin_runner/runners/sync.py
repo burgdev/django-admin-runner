@@ -16,7 +16,10 @@ class SyncCommandRunner(BaseCommandRunner):
         execution.backend = self.backend
         execution.save(update_fields=["backend"])
 
-        execute_command(command_name, kwargs, execution.pk)
+        try:
+            execute_command(command_name, kwargs, execution.pk)
+        except Exception:
+            pass  # execute_command already saved the FAILED status and traceback
         execution.refresh_from_db()
 
         return RunResult(

@@ -205,7 +205,8 @@ class TestHooksIntegration:
                 command_name="failing_command",
                 triggered_by=superuser,
             )
-            execute_command("failing_command", {}, execution.pk)
+            with pytest.raises(Exception):
+                execute_command("failing_command", {}, execution.pk)
             execution.refresh_from_db()
             assert execution.status == "FAILED"
             assert "post_save" in calls
@@ -336,7 +337,8 @@ class TestHooksIntegration:
                 command_name="failing_command",
                 triggered_by=superuser,
             )
-            execute_command("failing_command", {}, execution.pk)
+            with pytest.raises(Exception):
+                execute_command("failing_command", {}, execution.pk)
             execution.refresh_from_db()
             assert execution.status == "FAILED"
             assert "pre_save" in calls

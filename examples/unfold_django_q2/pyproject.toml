@@ -1,0 +1,11 @@
+[project]
+name = "example-unfold-django-q2"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "django-admin-runner[django-q2,unfold]",
+    "croniter>=3.0",
+]
+
+[tool.uv.sources]
+django-admin-runner = { path = "../..", editable = true }

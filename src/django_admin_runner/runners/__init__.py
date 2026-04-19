@@ -40,6 +40,7 @@ def get_runner() -> BaseCommandRunner:
     - ``"django"`` (default) — :class:`~django_admin_runner.runners.django_tasks.DjangoTaskRunner`
     - ``"sync"`` — :class:`~django_admin_runner.runners.sync.SyncCommandRunner`
     - ``"celery"`` — :class:`~django_admin_runner.runners.celery.CeleryCommandRunner`
+    - ``"django-q2"`` — :class:`~django_admin_runner.runners.django_q2.DjangoQ2CommandRunner`
     - dotted path — any :class:`BaseCommandRunner` subclass
     """
     from django.conf import settings
@@ -54,6 +55,10 @@ def get_runner() -> BaseCommandRunner:
         from .celery import CeleryCommandRunner
 
         return CeleryCommandRunner()
+    if backend == "django-q2":
+        from .django_q2 import DjangoQ2CommandRunner
+
+        return DjangoQ2CommandRunner()
     if backend == "django":
         from .django_tasks import DjangoTaskRunner
 

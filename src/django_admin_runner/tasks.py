@@ -64,6 +64,8 @@ def execute_command(command_name: str, kwargs: dict, execution_pk: int) -> None:
     # Activate execution context (contextvars)
     exec_ctx = _set_execution_context()
 
+    command_exc: Exception | None = None
+
     try:
         # Setup hooks (forward order)
         for hook in hooks:
@@ -92,9 +94,10 @@ def execute_command(command_name: str, kwargs: dict, execution_pk: int) -> None:
                     **kwargs,
                 )
             execution.status = CommandExecution.Status.SUCCESS
-        except Exception:
+        except Exception as exc:
             execution.status = CommandExecution.Status.FAILED
             execution.stderr = _rich_traceback() or traceback.format_exc()
+            command_exc = exc
         finally:
             execution.stdout = stdout_buf.getvalue()
             if not execution.stderr:
@@ -130,5 +133,12 @@ def execute_command(command_name: str, kwargs: dict, execution_pk: int) -> None:
                     type(hook).__qualname__,
                     command_name,
                 )
+
+        # Re-raise so the task backend (Celery, django-q2, …) also marks the
+        # task as failed.  We do this *after* saving the execution record so
+        # the admin always has the failure details even if the backend doesn't
+        # store them.
+        if command_exc is not None:
+            raise command_exc
     finally:
         _clear_execution_context()

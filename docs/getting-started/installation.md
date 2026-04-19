@@ -37,6 +37,12 @@ For Celery support:
 pip install "django-admin-runner[celery]"
 ```
 
+For Django-Q2 support:
+
+```bash
+pip install "django-admin-runner[django-q2]"
+```
+
 For Unfold admin:
 
 ```bash
@@ -57,6 +63,9 @@ ADMIN_RUNNER_BACKEND = "sync"
 
 # settings.py — use Celery
 ADMIN_RUNNER_BACKEND = "celery"
+
+# settings.py — use Django-Q2 (no external broker needed)
+ADMIN_RUNNER_BACKEND = "django-q2"
 
 # settings.py — custom dotted path
 ADMIN_RUNNER_BACKEND = "myapp.runners.MyCustomRunner"
