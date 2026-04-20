@@ -86,7 +86,7 @@ class FileOrPathWidget(forms.MultiWidget):
         ctx = super().get_context(name, value, attrs)
         from django.conf import settings
 
-        ctx["upload_enabled"] = bool(getattr(settings, "ADMIN_RUNNER_UPLOAD_PATH", ""))
+        ctx["upload_enabled"] = bool(getattr(settings, "ADMIN_RUNNER_UPLOAD_PATH", ""))  # type: ignore[assignment]
         return ctx
 
     def decompress(self, value):
@@ -178,7 +178,7 @@ def _apply_unfold_widget(field: forms.Field) -> None:
         # Re-sync choices from field to widget: replacing the widget above
         # creates a fresh instance with choices=[], so we must push the
         # field's choices back down via the setter.
-        field.choices = field.choices
+        field.choices = field.choices  # type: ignore[assignment]
     elif isinstance(field, forms.IntegerField):
         field.widget = UnfoldAdminIntegerFieldWidget()
     elif isinstance(field, forms.CharField):

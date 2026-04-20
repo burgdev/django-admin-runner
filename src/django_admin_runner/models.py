@@ -8,7 +8,7 @@ class RegisteredCommand(models.Model):
     display_name = models.CharField(max_length=200)
     description = models.TextField(blank=True)
     app_label = models.CharField(max_length=200, blank=True)
-    active = models.BooleanField(default=True)
+    active = models.BooleanField(default=True)  # type: ignore[assignment]
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -18,7 +18,7 @@ class RegisteredCommand(models.Model):
         verbose_name_plural = "Commands"
 
     def __str__(self) -> str:
-        return self.name
+        return self.name  # type: ignore[return-value]
 
 
 class CommandExecution(models.Model):

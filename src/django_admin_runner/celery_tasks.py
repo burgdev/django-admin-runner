@@ -77,6 +77,7 @@ def _register_celery_tasks() -> None:
                     )
                     execution_pk = execution.pk
 
+                assert execution_pk is not None
                 execute_command(cn, kwargs or {}, execution_pk)
 
             return _task

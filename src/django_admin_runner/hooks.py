@@ -120,6 +120,7 @@ class TempFileHook(CommandHook):
         temp_dir = ctx.get("upload_dir")
         if temp_dir is None:
             return
+        assert isinstance(temp_dir, str)
         try:
             shutil.rmtree(temp_dir, ignore_errors=True)
         except Exception:

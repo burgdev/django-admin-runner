@@ -23,7 +23,7 @@ class Migration(migrations.Migration):
                 ("display_name", models.CharField(max_length=200)),
                 ("description", models.TextField(blank=True)),
                 ("app_label", models.CharField(blank=True, max_length=200)),
-                ("active", models.BooleanField(default=True)),
+                ("active", models.BooleanField(default=True)),  # type: ignore[assignment]
                 ("created_at", models.DateTimeField(auto_now_add=True)),
                 ("updated_at", models.DateTimeField(auto_now=True)),
             ],
