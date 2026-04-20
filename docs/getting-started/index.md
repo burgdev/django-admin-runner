@@ -9,7 +9,7 @@
     </p>
     <div class="md-hero__buttons">
       <a href="quickstart/" class="md-button">Get Started</a>
-      <a href="examples/" class="md-button md-button--secondary">See Examples</a>
+      <a href="../examples/" class="md-button md-button--secondary">See Examples</a>
     </div>
   </div>
 </div>
