@@ -1,0 +1,158 @@
+/* ──────────────────────────────────────────────
+   django-admin-runner docs — custom styling
+   ────────────────────────────────────────────── */
+
+/* ── Color palette ───────────────────────────── */
+:root {
+  --dar-primary: #0c4b33;
+  --dar-primary-light: #44cc77;
+  --dar-primary-dark: #093d28;
+  --dar-accent: #2eaa55;
+  --dar-text-on-primary: #ffffff;
+  --dar-card-border: #e2e8f0;
+  --dar-card-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  --dar-card-radius: 8px;
+}
+
+[data-md-color-scheme="slate"] {
+  --dar-card-border: #2e3a4a;
+  --dar-card-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+}
+
+/* ── Hero section ────────────────────────────── */
+.md-hero {
+  background: linear-gradient(
+    135deg,
+    var(--dar-primary) 0%,
+    var(--dar-primary-dark) 100%
+  );
+  color: var(--dar-text-on-primary);
+  padding: 2rem 1rem 1.5rem;
+  text-align: center;
+}
+
+.md-hero h1 {
+  font-size: 1.8rem;
+  font-weight: 700;
+  margin-bottom: 0.3rem;
+  color: var(--dar-text-on-primary);
+}
+
+.md-hero .md-hero__tagline {
+  font-size: 0.95rem;
+  opacity: 0.9;
+  margin-bottom: 1.2rem;
+  max-width: 520px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.md-hero .md-hero__buttons {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.md-hero .md-button {
+  background: var(--dar-primary-light);
+  color: var(--dar-primary-dark);
+  border: none;
+  border-radius: 5px;
+  padding: 0.4rem 1.2rem;
+  font-weight: 600;
+  font-size: 0.82rem;
+  text-decoration: none;
+  transition:
+    background 0.2s,
+    transform 0.1s;
+}
+
+.md-hero .md-button:hover {
+  background: #66dd99;
+  transform: translateY(-1px);
+}
+
+.md-hero .md-button--secondary {
+  background: transparent;
+  color: var(--dar-primary-light);
+  border: 1.5px solid var(--dar-primary-light);
+}
+
+.md-hero .md-button--secondary:hover {
+  background: rgba(68, 204, 119, 0.15);
+}
+
+/* ── Feature cards ───────────────────────────── */
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+  margin: 1.25rem 0;
+}
+
+@media (max-width: 960px) {
+  .feature-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .feature-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.feature-card {
+  border: 1px solid var(--dar-card-border);
+  border-radius: var(--dar-card-radius);
+  padding: 1rem;
+  box-shadow: var(--dar-card-shadow);
+  transition:
+    transform 0.15s,
+    box-shadow 0.15s;
+  background: var(--md-default-bg-color, #fff);
+}
+
+.feature-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
+}
+
+.feature-card .feature-icon {
+  color: var(--dar-primary-light);
+  margin-bottom: 0.35rem;
+  line-height: 1;
+}
+
+.feature-card .feature-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.feature-card h3 {
+  font-size: 0.88rem;
+  font-weight: 600;
+  margin: 0 0 0.2rem;
+  padding: 0;
+}
+
+.feature-card h3 code {
+  font-size: 0.85rem;
+  background: none;
+  padding: 0;
+}
+
+.feature-card p {
+  font-size: 0.8rem;
+  line-height: 1.45;
+  margin: 0;
+  padding: 0;
+  opacity: 0.8;
+}
+
+.feature-card p code {
+  font-size: 0.78rem;
+  background: none;
+  padding: 0;
+}

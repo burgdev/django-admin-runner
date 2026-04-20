@@ -25,7 +25,7 @@
         <div class="flex items-center justify-between px-4 py-3 bg-white dark:bg-base-900">
           <div>
             <p class="font-semibold text-sm text-font-important-light dark:text-font-important-dark">
-              {{ cmd.name }}
+              <a href="{% url 'admin:django_admin_runner_command_run' cmd.name %}" class="hover:text-primary-600 dark:hover:text-primary-400 transition-colors">{{ cmd.name }}</a>
             </p>
             {% if cmd.command_class.help %}
             <p class="text-xs text-font-default-light dark:text-font-default-dark mt-0.5">
@@ -33,10 +33,16 @@
             </p>
             {% endif %}
           </div>
-          <a href="{% url 'admin:django_admin_runner_command_run' cmd.name %}"
-             class="border cursor-pointer font-medium px-3 py-2 rounded-default text-center whitespace-nowrap bg-primary-600 border-transparent text-white text-sm hover:bg-primary-500 transition-colors">
-            {% trans "Run" %}
-          </a>
+          <div class="flex items-center gap-2">
+            <a href="{% url 'admin:django_admin_runner_commandexecution_changelist' %}?command_name={{ cmd.name }}"
+               class="border cursor-pointer font-medium px-3 py-2 rounded-default text-center whitespace-nowrap bg-transparent border-base-300 dark:border-base-600 text-font-important-light dark:text-font-important-dark text-sm hover:bg-base-100 dark:hover:bg-base-800 transition-colors">
+              {% trans "History" %}
+            </a>
+            <a href="{% url 'admin:django_admin_runner_command_run' cmd.name %}"
+               class="border cursor-pointer font-medium px-3 py-2 rounded-default text-center whitespace-nowrap bg-primary-600 border-transparent text-white text-sm hover:bg-primary-500 transition-colors">
+              {% trans "Run" %}
+            </a>
+          </div>
         </div>
         {% endfor %}
       </div>

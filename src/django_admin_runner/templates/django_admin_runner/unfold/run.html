@@ -6,7 +6,7 @@
 {% block breadcrumbs %}
 <div class="breadcrumbs">
   <a href="{% url 'admin:index' %}">{% trans "Home" %}</a>
-  &rsaquo; <a href="{% url 'admin:django_admin_runner_command_list' %}">{% trans "Run Commands" %}</a>
+  &rsaquo; <a href="{% url 'admin:django_admin_runner_registeredcommand_changelist' %}">{% trans "Commands" %}</a>
   &rsaquo; {{ command_name }}
 </div>
 {% endblock %}
@@ -90,7 +90,7 @@
                 class="border cursor-pointer font-medium px-3 py-2 rounded-default text-center whitespace-nowrap bg-primary-600 border-transparent text-white text-sm hover:bg-primary-500 transition-colors">
           {% trans "Run command" %}
         </button>
-        <a href="{% url 'admin:django_admin_runner_command_list' %}"
+        <a href="{% url 'admin:django_admin_runner_registeredcommand_changelist' %}"
            class="text-sm font-medium text-font-default-light dark:text-font-default-dark hover:text-primary-600 dark:hover:text-primary-400 transition-colors">
           {% trans "Cancel" %}
         </a>

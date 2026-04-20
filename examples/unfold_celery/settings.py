@@ -65,6 +65,8 @@ DATABASES = {
 }
 
 STATIC_URL = "/static/"
+MEDIA_URL = "/media/"
+MEDIA_ROOT = os.path.join(BASE_DIR, "media")
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Celery
@@ -73,23 +75,39 @@ CELERY_RESULT_BACKEND = "django-db"
 CELERY_RESULT_EXTENDED = True
 
 ADMIN_RUNNER_BACKEND = "celery"
+ADMIN_RUNNER_UPLOAD_PATH = os.path.join(BASE_DIR, "uploads")
+ADMIN_RUNNER_BASE_URL = "http://127.0.0.1:8765"
 
 UNFOLD = {
     "SIDEBAR": {
         "navigation": [
+            {
+                "title": "Models",
+                "separator": False,
+                "collapsible": False,
+                "items": [
+                    {
+                        "title": "Books",
+                        "icon": "book",
+                        "link": reverse_lazy("admin:books_book_changelist"),
+                    },
+                ],
+            },
             {
                 "title": "Command Runner",
                 "separator": False,
                 "collapsible": False,
                 "items": [
                     {
-                        "title": "Run Commands",
+                        "title": "Commands",
                         "icon": "terminal",
-                        "link": reverse_lazy("admin:django_admin_runner_command_list"),
+                        "link": reverse_lazy(
+                            "admin:django_admin_runner_registeredcommand_changelist"
+                        ),
                         "permission": lambda request: request.user.is_staff,
                     },
                     {
-                        "title": "Command executions",
+                        "title": "Results",
                         "icon": "history",
                         "link": reverse_lazy(
                             "admin:django_admin_runner_commandexecution_changelist"
@@ -116,31 +134,35 @@ UNFOLD = {
                 ],
             },
             {
-                "title": "Periodic Tasks",
+                "title": "Celery Tasks",
                 "separator": True,
                 "collapsible": True,
                 "items": [
                     {
                         "title": "Periodic tasks",
-                        "icon": "schedule",
+                        "icon": "task",
                         "link": reverse_lazy("admin:django_celery_beat_periodictask_changelist"),
                     },
                     {
                         "title": "Intervals",
+                        "icon": "timer",
                         "link": reverse_lazy(
                             "admin:django_celery_beat_intervalschedule_changelist"
                         ),
                     },
                     {
                         "title": "Crontabs",
+                        "icon": "update",
                         "link": reverse_lazy("admin:django_celery_beat_crontabschedule_changelist"),
                     },
                     {
                         "title": "Solar events",
+                        "icon": "event",
                         "link": reverse_lazy("admin:django_celery_beat_solarschedule_changelist"),
                     },
                     {
                         "title": "Clocked",
+                        "icon": "hourglass_bottom",
                         "link": reverse_lazy("admin:django_celery_beat_clockedschedule_changelist"),
                     },
                 ],
@@ -152,10 +174,12 @@ UNFOLD = {
                 "items": [
                     {
                         "title": "Task results",
+                        "icon": "checklist_rtl",
                         "link": reverse_lazy("admin:django_celery_results_taskresult_changelist"),
                     },
                     {
                         "title": "Group results",
+                        "icon": "playlist_add_check",
                         "link": reverse_lazy("admin:django_celery_results_groupresult_changelist"),
                     },
                 ],

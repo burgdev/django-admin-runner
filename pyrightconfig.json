@@ -3,5 +3,6 @@
   "typeCheckingMode": "basic",
   "reportAttributeAccessIssue": "none",
   "reportAssignmentType": "none",
-  "reportCallIssue": "none"
+  "reportCallIssue": "none",
+  "reportMissingImports": "none"
 }

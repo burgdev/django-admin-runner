@@ -2,6 +2,25 @@ from django.conf import settings
 from django.db import models
 
 
+class RegisteredCommand(models.Model):
+    name = models.CharField(max_length=200, unique=True)
+    group = models.CharField(max_length=200)
+    display_name = models.CharField(max_length=200)
+    description = models.TextField(blank=True)
+    app_label = models.CharField(max_length=200, blank=True)
+    active = models.BooleanField(default=True)  # type: ignore[assignment]
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["group", "name"]
+        verbose_name = "Command"
+        verbose_name_plural = "Commands"
+
+    def __str__(self) -> str:
+        return self.name  # type: ignore[return-value]
+
+
 class CommandExecution(models.Model):
     class Status(models.TextChoices):
         PENDING = "PENDING", "Pending"
@@ -17,6 +36,7 @@ class CommandExecution(models.Model):
     )
     stdout = models.TextField(blank=True)
     stderr = models.TextField(blank=True)
+    result_html = models.TextField(blank=True)
     kwargs = models.JSONField(default=dict)
     triggered_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -33,6 +53,8 @@ class CommandExecution(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+        verbose_name = "Result"
+        verbose_name_plural = "Results"
 
     def __str__(self) -> str:
         return f"{self.command_name} ({self.status})"

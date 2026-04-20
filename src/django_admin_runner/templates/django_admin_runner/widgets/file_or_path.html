@@ -1,9 +1,15 @@
 {% load i18n %}
 <div class="file-or-path-widget">
-  {% for subwidget in widget.subwidgets %}
-    {% if not forloop.first %}
-    <span class="file-or-path-or">{% trans "or enter a server-side path:" %}</span>
+  {% for widget in widget.subwidgets %}
+    {% if forloop.first %}
+      {% if upload_enabled %}
+      <div class="file-upload-part">
+        {% include widget.template_name %}
+      </div>
+      <span class="file-or-path-or">{% trans "or enter a server-side path:" %}</span>
+      {% endif %}
+    {% else %}
+      {% include widget.template_name %}
     {% endif %}
-    {% include subwidget %}
   {% endfor %}
 </div>

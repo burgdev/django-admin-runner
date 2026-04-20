@@ -8,54 +8,6 @@ User = get_user_model()
 
 
 # ---------------------------------------------------------------------------
-# List view
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.django_db
-class TestCommandListView:
-    def test_list_view_ok_for_superuser(self, admin_client):
-        url = reverse("admin:django_admin_runner_command_list")
-        response = admin_client.get(url)
-        assert response.status_code == 200
-
-    def test_list_view_redirects_anonymous(self, client):
-        url = reverse("admin:django_admin_runner_command_list")
-        response = client.get(url)
-        assert response.status_code == 302
-
-    def test_list_view_grouped_commands_in_context(self, admin_client):
-        url = reverse("admin:django_admin_runner_command_list")
-        response = admin_client.get(url)
-        assert "grouped_commands" in response.context
-        grouped = response.context["grouped_commands"]
-        # All test commands are in group "Test"
-        assert "Test" in grouped
-
-    def test_list_view_shows_registered_commands(self, admin_client):
-        url = reverse("admin:django_admin_runner_command_list")
-        response = admin_client.get(url)
-        content = response.content.decode()
-        assert "simple_command" in content
-
-    def test_list_view_superuser_sees_all(self, admin_client):
-        url = reverse("admin:django_admin_runner_command_list")
-        response = admin_client.get(url)
-        grouped = response.context["grouped_commands"]
-        all_names = [cmd["name"] for cmds in grouped.values() for cmd in cmds]
-        assert "simple_command" in all_names
-
-    def test_list_view_hides_superuser_commands_from_staff(self, staff_client):
-        # All test commands use default permission="superuser" so a staff-only
-        # user should see nothing (unless they are also superuser)
-        url = reverse("admin:django_admin_runner_command_list")
-        response = staff_client.get(url)
-        assert response.status_code == 200
-        grouped = response.context["grouped_commands"]
-        assert len(grouped) == 0
-
-
-# ---------------------------------------------------------------------------
 # Run view — GET
 # ---------------------------------------------------------------------------
 
@@ -168,3 +120,63 @@ class TestCommandExecutionAdminQueryset:
         qs = response.context["cl"].queryset
         assert qs.count() == 1
         assert qs.first().command_name == "mine"
+
+
+# ---------------------------------------------------------------------------
+# Result view
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestResultView:
+    def test_result_view_with_result_html(self, admin_client, superuser):
+        execution = CommandExecution.objects.create(
+            command_name="simple_command",
+            triggered_by=superuser,
+            status="SUCCESS",
+            result_html="<h1>Report</h1><p>Done</p>",
+        )
+        url = reverse("admin:django_admin_runner_commandexecution_result", args=[execution.pk])
+        response = admin_client.get(url)
+        assert response.status_code == 200
+        content = response.content.decode()
+        assert "<h1>Report</h1>" in content
+
+    def test_result_view_without_result_html_shows_stdout(self, admin_client, superuser):
+        execution = CommandExecution.objects.create(
+            command_name="simple_command",
+            triggered_by=superuser,
+            status="SUCCESS",
+            stdout="Hello world output",
+        )
+        url = reverse("admin:django_admin_runner_commandexecution_result", args=[execution.pk])
+        response = admin_client.get(url)
+        assert response.status_code == 200
+        content = response.content.decode()
+        assert "Hello world output" in content
+
+    def test_result_view_404_for_invalid_pk(self, admin_client):
+        url = reverse("admin:django_admin_runner_commandexecution_result", args=[99999])
+        response = admin_client.get(url)
+        assert response.status_code == 404
+
+    def test_result_view_permission_denied_for_other_user(self, client, db):
+        from django.contrib.auth.models import Permission
+        from django.contrib.contenttypes.models import ContentType
+
+        user = User.objects.create_user("limited", "l@e.com", "pw", is_staff=True)
+        other = User.objects.create_superuser("admin2", "a2@e.com", "pw")
+        ct = ContentType.objects.get_for_model(CommandExecution)
+        perm = Permission.objects.get(content_type=ct, codename="view_commandexecution")
+        user.user_permissions.add(perm)
+
+        execution = CommandExecution.objects.create(
+            command_name="cmd",
+            triggered_by=other,
+            result_html="<p>Secret</p>",
+        )
+
+        client.force_login(user)
+        url = reverse("admin:django_admin_runner_commandexecution_result", args=[execution.pk])
+        response = client.get(url)
+        assert response.status_code == 404  # get_queryset filters it out

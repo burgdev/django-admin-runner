@@ -3,8 +3,8 @@
 
 {% block object-tools-items %}
 <li>
-  <a href="{% url 'admin:django_admin_runner_command_list' %}" class="addlink">
-    {% trans "Run Commands" %}
+  <a href="{% url 'admin:django_admin_runner_registeredcommand_changelist' %}" class="addlink">
+    {% trans "Commands" %}
   </a>
 </li>
 {{ block.super }}

@@ -63,7 +63,11 @@ DATABASES = {
     }
 }
 
+ADMIN_RUNNER_BASE_URL = "http://127.0.0.1:8000"
+
 STATIC_URL = "/static/"
+MEDIA_URL = "/media/"
+MEDIA_ROOT = os.path.join(BASE_DIR, "media")
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 RQ_QUEUES = {
@@ -86,13 +90,15 @@ UNFOLD = {
                 "collapsible": False,
                 "items": [
                     {
-                        "title": "Run Commands",
+                        "title": "Commands",
                         "icon": "terminal",
-                        "link": reverse_lazy("admin:django_admin_runner_command_list"),
+                        "link": reverse_lazy(
+                            "admin:django_admin_runner_registeredcommand_changelist"
+                        ),
                         "permission": lambda request: request.user.is_staff,
                     },
                     {
-                        "title": "Command executions",
+                        "title": "Results",
                         "icon": "history",
                         "link": reverse_lazy(
                             "admin:django_admin_runner_commandexecution_changelist"

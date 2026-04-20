@@ -193,3 +193,136 @@ class TestFormFromCommand:
         FormClass = form_from_command("positional_command")
         assert "filename" in FormClass().fields
         assert "count" in FormClass().fields
+
+    # ------------------------------------------------------------------
+    # Unfold widget replacement
+    # ------------------------------------------------------------------
+
+    def test_choices_survive_unfold_widget_replacement(self):
+        """Choices must be synced to the new widget after Unfold replaces it."""
+        from unittest.mock import MagicMock, patch
+
+        # Build fake unfold.widgets module with mock widget classes
+        unfold_widgets = MagicMock()
+        mock_select_widget = forms.Select()  # fresh widget with choices=[]
+        unfold_widgets.UnfoldAdminSelectWidget.return_value = mock_select_widget
+        unfold_widgets.UnfoldAdminTextInputWidget = forms.TextInput
+        unfold_widgets.UnfoldAdminIntegerFieldWidget = forms.NumberInput
+        unfold_widgets.UnfoldBooleanWidget = forms.CheckboxInput
+
+        with (
+            patch("django_admin_runner.admin_compat.is_unfold_installed", return_value=True),
+            patch.dict("sys.modules", {"unfold.widgets": unfold_widgets}),
+        ):
+            FormClass = form_from_command("param_command")
+
+        field = FormClass().fields["mode"]
+        assert isinstance(field, forms.ChoiceField)
+        choice_values = [v for v, _ in field.widget.choices]
+        assert "fast" in choice_values
+        assert "slow" in choice_values
+
+
+# ---------------------------------------------------------------------------
+# FileOrPathWidget rendering
+# ---------------------------------------------------------------------------
+
+
+class TestFileOrPathWidgetRendering:
+    def test_upload_enabled_context_flag(self):
+        from django.test import override_settings
+
+        from django_admin_runner.forms import FileOrPathField
+
+        field = FileOrPathField()
+        with override_settings(ADMIN_RUNNER_UPLOAD_PATH="/tmp/uploads"):
+            ctx = field.widget.get_context("source", None, {})
+        assert ctx["upload_enabled"] is True
+
+    def test_upload_disabled_context_flag(self):
+        from django.test import override_settings
+
+        from django_admin_runner.forms import FileOrPathField
+
+        field = FileOrPathField()
+        with override_settings(ADMIN_RUNNER_UPLOAD_PATH=""):
+            ctx = field.widget.get_context("source", None, {})
+        assert ctx["upload_enabled"] is False
+
+    def test_classic_template_used_by_default(self):
+        from django_admin_runner.forms import FileOrPathWidget
+
+        widget = FileOrPathWidget()
+        assert widget.template_name == "django_admin_runner/widgets/file_or_path.html"
+
+    def test_render_with_upload_enabled(self):
+        from django.test import override_settings
+
+        from django_admin_runner.forms import FileOrPathField
+
+        field = FileOrPathField()
+        with override_settings(ADMIN_RUNNER_UPLOAD_PATH="/tmp/uploads"):
+            html = field.widget.render("source", None)
+        # Should contain a file input
+        assert 'type="file"' in html
+
+    def test_render_without_upload_enabled(self):
+        from django.test import override_settings
+
+        from django_admin_runner.forms import FileOrPathField
+
+        field = FileOrPathField()
+        with override_settings(ADMIN_RUNNER_UPLOAD_PATH=""):
+            html = field.widget.render("source", None)
+        # Should NOT contain a file input when upload disabled
+        assert 'type="file"' not in html
+
+
+# ---------------------------------------------------------------------------
+# FileOrPathField.compress
+# ---------------------------------------------------------------------------
+
+
+class TestFileOrPathFieldCompress:
+    def test_typed_path_returned_as_is(self):
+        from django_admin_runner.forms import FileOrPathField
+
+        field = FileOrPathField()
+        result = field.compress([None, "/data/file.csv"])
+        assert result == "/data/file.csv"
+
+    def test_empty_values_return_empty_string(self):
+        from django_admin_runner.forms import FileOrPathField
+
+        field = FileOrPathField()
+        result = field.compress([None, ""])
+        assert result == ""
+
+    def test_uploaded_file_saved_to_upload_path(self, tmp_path):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from django.test import override_settings
+
+        from django_admin_runner.forms import FileOrPathField
+
+        field = FileOrPathField()
+        uploaded = SimpleUploadedFile("test.csv", b"col1,col2\n1,2\n")
+        with override_settings(ADMIN_RUNNER_UPLOAD_PATH=str(tmp_path)):
+            result = field.compress([uploaded, ""])
+        assert str(tmp_path) in result
+        assert result.endswith("test.csv")
+        with open(result) as f:
+            assert f.read() == "col1,col2\n1,2\n"
+
+    def test_uploaded_file_falls_back_to_tmpdir_without_setting(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from django.test import override_settings
+
+        from django_admin_runner.forms import FileOrPathField
+
+        field = FileOrPathField()
+        uploaded = SimpleUploadedFile("test.csv", b"data")
+        with override_settings(ADMIN_RUNNER_UPLOAD_PATH=""):
+            result = field.compress([uploaded, ""])
+        assert result.endswith("test.csv")
+        with open(result) as f:
+            assert f.read() == "data"

@@ -25,8 +25,23 @@ from django_celery_beat.models import (
     PeriodicTask,
     SolarSchedule,
 )
+from django_celery_results.admin import GroupResultAdmin, TaskResultAdmin
+from django_celery_results.models import GroupResult, TaskResult
 from unfold.admin import ModelAdmin
 from unfold.forms import AdminPasswordChangeForm, UserChangeForm, UserCreationForm
+
+from .models import Book
+
+# ---------------------------------------------------------------------------
+# Book
+# ---------------------------------------------------------------------------
+
+
+@admin.register(Book)
+class BookAdmin(ModelAdmin):
+    list_display = ["title", "author", "published_date", "isbn"]
+    search_fields = ["title", "author", "isbn"]
+
 
 # ---------------------------------------------------------------------------
 # User & Group — Unfold-styled versions
@@ -57,25 +72,43 @@ for _model in [PeriodicTask, IntervalSchedule, CrontabSchedule, SolarSchedule, C
 
 
 @admin.register(PeriodicTask)
-class UnfoldPeriodicTaskAdmin(ModelAdmin, PeriodicTaskAdmin):
+class UnfoldPeriodicTaskAdmin(PeriodicTaskAdmin, ModelAdmin):
     pass
 
 
 @admin.register(IntervalSchedule)
-class UnfoldIntervalScheduleAdmin(ModelAdmin, IntervalScheduleAdmin):
+class UnfoldIntervalScheduleAdmin(IntervalScheduleAdmin, ModelAdmin):
     pass
 
 
 @admin.register(CrontabSchedule)
-class UnfoldCrontabScheduleAdmin(ModelAdmin, CrontabScheduleAdmin):
+class UnfoldCrontabScheduleAdmin(CrontabScheduleAdmin, ModelAdmin):
     pass
 
 
 @admin.register(SolarSchedule)
-class UnfoldSolarScheduleAdmin(ModelAdmin, SolarScheduleAdmin):
+class UnfoldSolarScheduleAdmin(SolarScheduleAdmin, ModelAdmin):
     pass
 
 
 @admin.register(ClockedSchedule)
-class UnfoldClockedScheduleAdmin(ModelAdmin, ClockedScheduleAdmin):
+class UnfoldClockedScheduleAdmin(ClockedScheduleAdmin, ModelAdmin):
+    pass
+
+
+# ---------------------------------------------------------------------------
+# Celery Results — Unfold-styled versions
+# ---------------------------------------------------------------------------
+
+for _model in [TaskResult, GroupResult]:
+    admin.site.unregister(_model)
+
+
+@admin.register(TaskResult)
+class UnfoldTaskResultAdmin(TaskResultAdmin, ModelAdmin):
+    pass
+
+
+@admin.register(GroupResult)
+class UnfoldGroupResultAdmin(GroupResultAdmin, ModelAdmin):
     pass

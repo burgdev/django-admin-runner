@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import os
 import tempfile
+import uuid
 from contextlib import contextmanager
 
 from django import forms
@@ -72,12 +73,21 @@ class FileOrPathWidget(forms.MultiWidget):
     """Renders a file-upload input and a text-path input side by side.
 
     The user can either upload a file *or* type a path on the server.
+    When ``ADMIN_RUNNER_UPLOAD_PATH`` is not set, the file input is hidden
+    and only the text path input is shown.
     """
 
     template_name = "django_admin_runner/widgets/file_or_path.html"
 
     def __init__(self, attrs=None):
         super().__init__([forms.FileInput(), forms.TextInput()], attrs)
+
+    def get_context(self, name, value, attrs):
+        ctx = super().get_context(name, value, attrs)
+        from django.conf import settings
+
+        ctx["upload_enabled"] = bool(getattr(settings, "ADMIN_RUNNER_UPLOAD_PATH", ""))  # type: ignore[assignment]
+        return ctx
 
     def decompress(self, value):
         # value is an existing path string (initial/default); show it in the text field
@@ -113,7 +123,14 @@ class FileOrPathField(forms.MultiValueField):
         typed_path = data_list[1] if len(data_list) > 1 else ""
 
         if uploaded_file:
-            tmp_dir = tempfile.mkdtemp(prefix="django_admin_runner_")
+            from django.conf import settings
+
+            upload_path = getattr(settings, "ADMIN_RUNNER_UPLOAD_PATH", "")
+            if upload_path:
+                tmp_dir = os.path.join(upload_path.rstrip("/"), f"upload_{uuid.uuid4().hex[:12]}")
+                os.makedirs(tmp_dir, exist_ok=True)
+            else:
+                tmp_dir = tempfile.mkdtemp(prefix="django_admin_runner_")
             dest_path = os.path.join(tmp_dir, uploaded_file.name)
             with open(dest_path, "wb") as fh:
                 for chunk in uploaded_file.chunks():
@@ -150,12 +167,18 @@ def _apply_unfold_widget(field: forms.Field) -> None:
         return
 
     if isinstance(field, FileOrPathField):
-        # Replace the text sub-widget (index 1) with the Unfold-styled version.
+        # Replace the text sub-widget (index 1) with the Unfold-styled version
+        # and switch to the Unfold template.
         field.widget.widgets[1] = UnfoldAdminTextInputWidget()
+        field.widget.template_name = "django_admin_runner/widgets/file_or_path_unfold.html"
     elif isinstance(field, forms.BooleanField):
         field.widget = UnfoldBooleanWidget()
     elif isinstance(field, forms.ChoiceField):
         field.widget = UnfoldAdminSelectWidget()
+        # Re-sync choices from field to widget: replacing the widget above
+        # creates a fresh instance with choices=[], so we must push the
+        # field's choices back down via the setter.
+        field.choices = field.choices  # type: ignore[assignment]
     elif isinstance(field, forms.IntegerField):
         field.widget = UnfoldAdminIntegerFieldWidget()
     elif isinstance(field, forms.CharField):
@@ -226,7 +249,7 @@ def form_from_command(command_name: str) -> type[forms.Form]:
 
         if dest in _DEFAULT_EXCLUDED:
             continue
-        if isinstance(action, (argparse._HelpAction, argparse._SubParsersAction)):  # noqa: SLF001
+        if isinstance(action, argparse._HelpAction | argparse._SubParsersAction):  # noqa: SLF001
             continue
         if getattr(action, "hidden", False):
             continue
@@ -252,7 +275,7 @@ def form_from_command(command_name: str) -> type[forms.Form]:
             field = _action_to_field(action)
 
         if field is not None:
-            if not user_specified:
+            if not user_specified or isinstance(field, FileOrPathField):
                 _apply_unfold_widget(field)
             fields[dest] = field
 
@@ -282,7 +305,7 @@ def _action_to_field(action: argparse.Action) -> forms.Field | None:
     if action.default not in (None, argparse.SUPPRESS):
         base_kwargs["initial"] = action.default
 
-    if isinstance(action, (argparse._StoreTrueAction, argparse._StoreFalseAction)):  # noqa: SLF001
+    if isinstance(action, argparse._StoreTrueAction | argparse._StoreFalseAction):  # noqa: SLF001
         return forms.BooleanField(required=False, help_text=help_text)
 
     if action.choices:

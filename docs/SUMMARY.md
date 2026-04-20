@@ -1,0 +1,23 @@
+<!-- Navigation for literate-nav plugin. This file IS the site navigation.
+     Do NOT edit the nav section in mkdocs.yml — this file takes precedence. -->
+
+* [Getting Started](getting-started/index.md)
+    * [Installation](getting-started/installation.md)
+    * [Quickstart](getting-started/quickstart.md)
+* [Guides](guides/guides.md)
+    * [Decorator](guides/decorator.md)
+    * [Runners](guides/runners.md)
+    * [Custom Runner](guides/custom-runner.md)
+    * [Execution Context](guides/execution-context.md)
+    * [Hooks](guides/hooks.md)
+    * [Admin Themes](guides/admin-themes.md)
+* [API Reference](api/api-reference.md)
+    * [register_command](api/register-command.md)
+    * [Context](api/context.md)
+    * [Forms](api/forms.md)
+    * [Hooks](api/hooks.md)
+    * [Runners](api/runners.md)
+    * [Models](api/models.md)
+    * [Admin](api/admin.md)
+* [Examples](examples.md)
+* [Changelog](changelog.md)

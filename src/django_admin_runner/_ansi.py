@@ -25,6 +25,7 @@ import re
 from dataclasses import dataclass, field
 
 _ANSI_RE = re.compile(r"\x1b\[([0-9;]*)m")
+_URL_RE = re.compile(r"https?://[^\s<>\"]+")
 
 
 @dataclass
@@ -199,3 +200,28 @@ def ansi_to_html(text: str) -> str:
     flush_span()
 
     return "".join(result)
+
+
+def linkify_urls(html: str) -> str:
+    """Wrap plain-text URLs in *html* with ``<a>`` tags.
+
+    Operates on the output of :func:`ansi_to_html` — text content has already
+    been HTML-escaped (e.g. ``&amp;``), so URL detection runs on the escaped
+    form.  The regex avoids matching inside existing HTML tags by excluding
+    ``<``, ``>``, and ``"`` characters.
+    """
+    trailing_punct = set(".,;:!?")
+
+    def _replace(m: re.Match[str]) -> str:
+        url = m.group(0)
+        # Strip trailing punctuation that's unlikely to be part of the URL
+        stripped = []
+        while url and url[-1] in trailing_punct:
+            stripped.append(url[-1])
+            url = url[:-1]
+        href = _html.unescape(url)
+        link = f'<a href="{_html.escape(href)}" target="_blank">{url}</a>'
+        # Re-append stripped punctuation after the link
+        return link + "".join(reversed(stripped))
+
+    return _URL_RE.sub(_replace, html)

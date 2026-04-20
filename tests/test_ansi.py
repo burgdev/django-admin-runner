@@ -1,6 +1,6 @@
 """Tests for the minimal ANSI-to-HTML converter in django_admin_runner._ansi."""
 
-from django_admin_runner._ansi import _256_to_rgb, ansi_to_html
+from django_admin_runner._ansi import _256_to_rgb, ansi_to_html, linkify_urls
 
 # ---------------------------------------------------------------------------
 # Plain text / HTML escaping
@@ -223,3 +223,52 @@ def test_256_to_rgb_grayscale_end():
 def test_256_to_rgb_red():
     # index 196 = 6x6x6 cube entry for pure red (r=5, g=0, b=0)
     assert _256_to_rgb(196) == (255, 0, 0)
+
+
+# ---------------------------------------------------------------------------
+# URL auto-linking (linkify_urls)
+# ---------------------------------------------------------------------------
+
+
+def test_url_in_plain_text():
+    html = linkify_urls("See https://example.com/export.csv for details")
+    assert (
+        '<a href="https://example.com/export.csv" target="_blank">https://example.com/export.csv</a>'
+        in html
+    )
+    assert "See " in html
+    assert " for details" in html
+
+
+def test_url_with_ansi_spans():
+    """URL linking works alongside ANSI color spans."""
+    colored = ansi_to_html("\x1b[32mDone: https://example.com/report\x1b[0m")
+    linked = linkify_urls(colored)
+    assert 'href="https://example.com/report"' in linked
+    assert 'target="_blank"' in linked
+    assert "ansi-fg-2" in linked
+
+
+def test_multiple_urls():
+    html = linkify_urls("https://a.com and https://b.com")
+    assert 'href="https://a.com"' in html
+    assert 'href="https://b.com"' in html
+
+
+def test_no_protocol_no_link():
+    html = linkify_urls("visit example.com/file.csv today")
+    assert "<a " not in html
+
+
+def test_url_trailing_punctuation_stripped():
+    html = linkify_urls("Saved to https://example.com/export.csv.")
+    assert 'href="https://example.com/export.csv"' in html
+    assert html.endswith(".")
+
+
+def test_linkify_empty_string():
+    assert linkify_urls("") == ""
+
+
+def test_linkify_no_urls():
+    assert linkify_urls("just plain text") == "just plain text"

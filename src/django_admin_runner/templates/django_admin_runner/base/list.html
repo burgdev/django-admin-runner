@@ -27,11 +27,14 @@
         <tbody>
           {% for cmd in commands %}
           <tr class="{% cycle 'row1' 'row2' %}">
-            <td><strong>{{ cmd.name }}</strong></td>
+            <td><a href="{% url 'admin:django_admin_runner_command_run' cmd.name %}"><strong>{{ cmd.name }}</strong></a></td>
             <td style="color: var(--body-quiet-color, #666);">{{ cmd.command_class.help|default:"" }}</td>
-            <td style="text-align: right;">
+            <td style="text-align: right; white-space: nowrap; display: flex; gap: 6px; justify-content: flex-end;">
               <a href="{% url 'admin:django_admin_runner_command_run' cmd.name %}" class="button">
                 {% trans "Run" %}
+              </a>
+              <a href="{% url 'admin:django_admin_runner_commandexecution_changelist' %}?command_name={{ cmd.name }}" class="button">
+                {% trans "History" %}
               </a>
             </td>
           </tr>
