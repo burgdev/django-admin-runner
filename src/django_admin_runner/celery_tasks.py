@@ -82,7 +82,7 @@ def _register_celery_tasks() -> None:
 
             return _task
 
-        _celery_tasks[cmd_name] = _make_task(cmd_name, task_name, help_text)
+        _celery_tasks[cmd_name] = _make_task(cmd_name, task_name, help_text)  # type: ignore[assignment]
         logger.debug("Registered Celery task %s for command %s", task_name, cmd_name)
 
 
