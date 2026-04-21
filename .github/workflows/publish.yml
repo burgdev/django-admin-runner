@@ -3,17 +3,18 @@ name: Publish
 on:
   push:
     tags: ["v*"]
+  repository_dispatch:
+    types: [new-tag-created]
 
 jobs:
   publish:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: astral-sh/setup-uv@v4
+      - uses: ./.github/actions/setup
 
       - run: uv build
 
-      - run: uv publish
-        env:
-          UV_PUBLISH_TOKEN: ${{ secrets.PYPI_TOKEN }}
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1

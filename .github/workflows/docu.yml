@@ -1,0 +1,20 @@
+name: Documentation
+
+on:
+  push:
+    tags: ["v*.*.*"]
+  repository_dispatch:
+    types: [new-tag-created]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: ./.github/actions/setup
+
+      - run: uv sync --group docs --all-extras
+
+      - name: Deploy to GitHub Pages
+        run: uv run --group docs zensical gh-deploy --force
