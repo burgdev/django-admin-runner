@@ -1,0 +1,15 @@
+name: Setup uv
+description: Setup uv with Python (requires actions/checkout first)
+
+inputs:
+  python-version:
+    description: Python version to use
+    required: false
+    default: "3.13"
+
+runs:
+  using: composite
+  steps:
+    - uses: astral-sh/setup-uv@v4
+      with:
+        python-version: ${{ inputs.python-version }}

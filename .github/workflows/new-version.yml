@@ -1,0 +1,53 @@
+name: New Version
+
+on:
+  workflow_run:
+    workflows: ["Quality", "Tests"]
+    branches: [main]
+    types: [completed]
+
+jobs:
+  tag:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+
+      - name: Check if tag exists
+        id: check
+        run: |
+          VERSION=$(grep -E '^version\s*=' pyproject.toml | head -1 | cut -d'"' -f2)
+          TAG="v${VERSION}"
+          if git tag -l "$TAG" | grep -q .; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "Tag $TAG already exists, skipping."
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "tag=$TAG" >> $GITHUB_OUTPUT
+            echo "New version detected: $TAG"
+          fi
+
+      - name: Create and push tag
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag ${{ steps.check.outputs.tag }}
+          git push origin ${{ steps.check.outputs.tag }}
+
+      - name: Trigger downstream workflows
+        if: steps.check.outputs.exists == 'false'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.repos.createDispatchEvent({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              event_type: 'new-tag-created',
+              client_payload: {
+                tag: '${{ steps.check.outputs.tag }}'
+              }
+            })
