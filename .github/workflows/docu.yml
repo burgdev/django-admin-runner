@@ -5,17 +5,35 @@ on:
     tags: ["v*.*.*"]
   repository_dispatch:
     types: [new-tag-created]
+  workflow_dispatch:
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
 
       - run: uv sync --group docs --all-extras
 
+      - name: Build docs
+        run: uv run --group docs zensical build
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
       - name: Deploy to GitHub Pages
-        run: uv run --group docs zensical gh-deploy --force
+        id: deploy
+        uses: actions/deploy-pages@v4
