@@ -118,7 +118,7 @@ class RegisteredCommandAdmin(_ModelAdminBase):  # type: ignore[misc]
         if obj.description:
             desc_html = (
                 f'<br><span style="color:var(--body-quiet-color,#666);'
-                f"max-width:300px;display:inline-block;overflow:hidden;"
+                f"max-width:100%;display:block;overflow:hidden;"
                 f"text-overflow:ellipsis;white-space:nowrap;"
                 f'font-size:12px;">{obj.description}</span>'
             )

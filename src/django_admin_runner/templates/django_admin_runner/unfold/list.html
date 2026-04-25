@@ -28,7 +28,7 @@
               <a href="{% url 'admin:django_admin_runner_command_run' cmd.name %}" class="hover:text-primary-600 dark:hover:text-primary-400 transition-colors">{{ cmd.name }}</a>
             </p>
             {% if cmd.command_class.help %}
-            <p class="text-xs text-font-default-light dark:text-font-default-dark mt-0.5">
+            <p class="text-xs text-font-default-light dark:text-font-default-dark mt-0.5" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
               {{ cmd.command_class.help }}
             </p>
             {% endif %}
