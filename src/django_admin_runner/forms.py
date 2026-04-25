@@ -7,6 +7,7 @@ import uuid
 from contextlib import contextmanager
 
 from django import forms
+from django.core.exceptions import ValidationError
 
 _DEFAULT_EXCLUDED = frozenset(
     {
@@ -282,6 +283,27 @@ def form_from_command(command_name: str) -> type[forms.Form]:
     return type("CommandForm", (forms.Form,), fields)
 
 
+class _TypedCharField(forms.CharField):
+    """``CharField`` that coerces the cleaned string through an argparse ``type`` callable.
+
+    Used when ``action.type`` is a callable that is not covered by a dedicated
+    Django field (e.g. ``decimal.Decimal``, ``pathlib.Path``, custom lambdas).
+    """
+
+    def __init__(self, type_callable, **kwargs):
+        super().__init__(**kwargs)
+        self._type_callable = type_callable
+
+    def clean(self, value):
+        value = super().clean(value)
+        if value in self.empty_values:
+            return value
+        try:
+            return self._type_callable(value)
+        except (ValueError, TypeError, argparse.ArgumentTypeError) as exc:
+            raise ValidationError(str(exc) or "Enter a valid value.", code="invalid") from exc
+
+
 def _action_to_field(action: argparse.Action) -> forms.Field | None:
     """Map an argparse *action* to the appropriate Django form field.
 
@@ -316,6 +338,12 @@ def _action_to_field(action: argparse.Action) -> forms.Field | None:
         field = forms.IntegerField(**base_kwargs)
         field.widget = admin_widgets.AdminIntegerFieldWidget()
         return field
+
+    if action.type is float:
+        return forms.FloatField(**base_kwargs)
+
+    if callable(action.type):
+        return _TypedCharField(action.type, **base_kwargs)
 
     field = forms.CharField(**base_kwargs)
     field.widget = admin_widgets.AdminTextInputWidget()

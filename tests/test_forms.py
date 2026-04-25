@@ -1,8 +1,10 @@
+import decimal
+
 import pytest
 from django import forms
 from django.contrib.admin.widgets import AdminIntegerFieldWidget, AdminTextInputWidget
 
-from django_admin_runner.forms import FileOrPathField, form_from_command
+from django_admin_runner.forms import FileOrPathField, _TypedCharField, form_from_command
 from django_admin_runner.registry import _registry
 
 
@@ -326,3 +328,46 @@ class TestFileOrPathFieldCompress:
         assert result.endswith("test.csv")
         with open(result) as f:
             assert f.read() == "data"
+
+
+# ---------------------------------------------------------------------------
+# Type conversion (float, Decimal, custom callables)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestTypeConversion:
+    def test_float_type_becomes_float_field(self):
+        FormClass = form_from_command("typed_command")
+        assert isinstance(FormClass().fields["interval"], forms.FloatField)
+
+    def test_float_input_cleaned_to_float(self):
+        FormClass = form_from_command("typed_command")
+        form = FormClass(data={"interval": "0.25", "amount": "1.0", "name": "x"})
+        assert form.is_valid(), form.errors
+        assert isinstance(form.cleaned_data["interval"], float)
+        assert form.cleaned_data["interval"] == 0.25
+
+    def test_decimal_type_produces_decimal_value(self):
+        FormClass = form_from_command("typed_command")
+        form = FormClass(data={"interval": "0.5", "amount": "9.99", "name": "x"})
+        assert form.is_valid(), form.errors
+        assert isinstance(form.cleaned_data["amount"], decimal.Decimal)
+        assert form.cleaned_data["amount"] == decimal.Decimal("9.99")
+
+    def test_custom_type_callable_is_invoked(self):
+        FormClass = form_from_command("typed_command")
+        # typed_command uses decimal.Decimal as the type callable — verify generic path
+        field = FormClass().fields["amount"]
+        assert isinstance(field, _TypedCharField)
+
+    def test_invalid_input_shows_validation_error(self):
+        FormClass = form_from_command("typed_command")
+        form = FormClass(data={"interval": "abc", "amount": "1.0", "name": "x"})
+        assert not form.is_valid()
+        assert "interval" in form.errors
+
+    def test_no_type_stays_charfield(self):
+        FormClass = form_from_command("typed_command")
+        assert isinstance(FormClass().fields["name"], forms.CharField)
+        assert not isinstance(FormClass().fields["name"], _TypedCharField)

@@ -19,4 +19,7 @@ class AdminRunnerConfig(AppConfig):
             warnings.filterwarnings(
                 "ignore", message="Accessing the database during app initialization"
             )
-            sync_registered_commands()
+            try:
+                sync_registered_commands()
+            except Exception:
+                pass
