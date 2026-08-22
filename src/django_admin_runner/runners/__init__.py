@@ -19,9 +19,15 @@ class RunResult:
 
 
 class BaseCommandRunner:
-    """Base class for command runners. Subclass and implement ``run()``."""
+    """Base class for command runners. Subclass and implement ``run()``.
+
+    Set ``supports_max_retries`` to ``True`` if the runner's task backend
+    supports per-task retry control (e.g. Celery's ``max_retries``).
+    When ``False``, a warning is logged if a command has ``max_retries > 0``.
+    """
 
     backend: str = ""
+    supports_max_retries: bool = False
 
     def run(
         self,

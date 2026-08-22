@@ -14,6 +14,8 @@ from django_admin_runner import register_command
     widgets=None,
     form_class=None,
     display_name=None,
+    timeout=None,
+    max_retries=0,
 )
 class Command(BaseCommand):
     ...
@@ -128,6 +130,45 @@ becomes `"Import Books"`).
 class Command(BaseCommand):
     ...
 ```
+
+### `timeout`
+Maximum execution time in seconds before the task runner kills the task.
+When `None` (default), falls back to the cluster-level timeout setting
+(e.g. `Q_CLUSTER["timeout"]` for django-q2).
+
+```python
+@register_command(timeout=3600)  # 1 hour
+class Command(BaseCommand):
+    ...
+```
+
+!!! note "django-q2 only"
+    Per-task timeout is supported by the django-q2 runner. Other runners
+    (Celery, Django Tasks, sync) ignore this setting.
+
+### `max_retries`
+Maximum number of retry attempts on failure. `0` (default) means no retry —
+the task runs once and the failure is final.
+
+Per-task retry control depends on the runner's task backend:
+
+| Runner | Per-task retry | Notes |
+|--------|---------------|-------|
+| Celery | Yes | Passes `max_retries` to `apply_async()` |
+| django-q2 | No | Logs a warning and ignores. Use `Q_CLUSTER["max_attempts"]` instead |
+| Django Tasks | No | Not yet supported by the backend |
+| Sync | N/A | Tasks run inline |
+
+```python
+@register_command(max_retries=3)  # retry up to 3 times (Celery only)
+class Command(BaseCommand):
+    ...
+```
+
+!!! tip "django-q2 users"
+    For django-q2, set `max_attempts` in `Q_CLUSTER` to control retries
+    globally. The runner will log a warning if a command has `max_retries > 0`
+    to remind you it's being ignored.
 
 ---
 

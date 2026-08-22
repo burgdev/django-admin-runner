@@ -1,0 +1,18 @@
+{% extends "admin/change_form.html" %}
+{% load static %}
+
+{% block extrahead %}{{ block.super }}
+<script id="dar-terminal-config" type="application/json">
+{
+    "outputUrl": "{{ dar_output_url }}",
+    "partUrl": "{{ dar_output_part_url }}",
+    "status": "{{ original.status }}",
+    "cols": {{ dar_term_cols }},
+    "rows": {{ dar_term_rows }},
+    "pollInterval": {{ dar_poll_interval }},
+    "stdoutUrl": "{{ stdout_url }}",
+    "stderrUrl": "{{ stderr_url }}",
+    "startedAt": "{{ dar_started_at }}"
+}
+</script>
+{% endblock %}

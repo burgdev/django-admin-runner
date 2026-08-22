@@ -3,27 +3,65 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, cast
 
 from django.contrib import admin
-from django.http import Http404, HttpResponse, HttpResponseForbidden
+from django.http import (
+    Http404,
+    HttpResponse,
+    HttpResponseBadRequest,
+    HttpResponseForbidden,
+    JsonResponse,
+)
 from django.shortcuts import redirect, render
 from django.urls import path, reverse
 from django.utils.safestring import SafeString, mark_safe
 
-from ._ansi import ansi_to_html as _convert_ansi
-from ._ansi import linkify_urls as _linkify
 from .admin_compat import get_model_admin_base, get_template, is_unfold_installed
 from .forms import form_from_command
-from .models import CommandExecution, RegisteredCommand
+from .models import CommandExecution, CommandOutputPart, RegisteredCommand
 from .registry import _registry, has_permission
 from .runners import get_runner
+from .tasks import _terminal_size
 
 if TYPE_CHECKING:
     from django.db import models as _models
 
+_OUTPUT_FIELDS = ("stdout", "stderr")
 
-def _ansi_to_html(text: str) -> SafeString:
-    """Wrap ANSI-coded *text* in a themed ``<pre>`` block with clickable URLs."""
-    html = _linkify(_convert_ansi(text))
-    return cast(SafeString, mark_safe(f'<pre class="ansi-output">{html}</pre>'))
+
+def _staff_view(view):
+    """Staff-gate a view *without* ``never_cache``.
+
+    ``admin_view`` always disables caching, which would defeat the immutable
+    caching of sealed output parts.  The view itself enforces object-level
+    permissions via the admin queryset.
+    """
+    from django.contrib.auth.decorators import user_passes_test
+
+    return user_passes_test(
+        lambda u: u.is_active and u.is_staff,
+        login_url="/admin/login/",
+    )(view)
+
+
+def _terminal_placeholder(field: str) -> SafeString:
+    """Render the container div that ``terminal-output.js`` turns into a widget."""
+    return cast(
+        SafeString,
+        mark_safe(f'<div class="dar-terminal" data-dar-field="{field}"></div>'),
+    )
+
+
+def _parse_cursor(cursor: str) -> tuple[int, int] | None:
+    """Parse an opaque ``"<seq>:<offset>"`` cursor; ``""`` means "from start"."""
+    if cursor == "":
+        return None
+    try:
+        seq_s, off_s = cursor.split(":", 1)
+        seq, off = int(seq_s), int(off_s)
+    except ValueError as err:
+        raise ValueError("invalid cursor") from err
+    if seq < 0 or off < 0:
+        raise ValueError("invalid cursor")
+    return seq, off
 
 
 # ---------------------------------------------------------------------------
@@ -153,8 +191,20 @@ class RegisteredCommandAdmin(_ModelAdminBase):  # type: ignore[misc]
 
 @admin.register(CommandExecution)
 class CommandExecutionAdmin(_ModelAdminBase):  # type: ignore[misc]
+    change_form_template = "admin/django_admin_runner/commandexecution/change_form.html"
+
     class Media:
-        css = {"all": ("django_admin_runner/ansi-output.css",)}
+        css = {
+            "all": (
+                "django_admin_runner/vendor/xterm/xterm.css",
+                "django_admin_runner/ansi-output.css",
+            )
+        }
+        js = (
+            "django_admin_runner/vendor/xterm/xterm.js",
+            "django_admin_runner/vendor/xterm/addon-webgl.js",
+            "django_admin_runner/terminal-output.js",
+        )
 
     list_display = [
         "command_name",
@@ -164,6 +214,8 @@ class CommandExecutionAdmin(_ModelAdminBase):  # type: ignore[misc]
         "created_at",
         "result_button",
     ]
+    # Avoid N+1 queries on the triggered_by foreign key in the change list.
+    list_select_related = ("triggered_by",)
     list_filter = ["status", "backend"]
     search_fields = ["command_name", "triggered_by__username"]
     readonly_fields = [
@@ -218,26 +270,24 @@ class CommandExecutionAdmin(_ModelAdminBase):  # type: ignore[misc]
 
     @admin.display(description="Standard output")
     def stdout_display(self, obj: CommandExecution) -> SafeString:
-        stdout = str(obj.stdout)
-        if not stdout:
+        if not obj.has_output("stdout"):
             return cast(SafeString, mark_safe("<em>—</em>"))
         url = reverse(
             "admin:django_admin_runner_commandexecution_stdout",
             args=[obj.pk],
         )
-        html = f'{_ansi_to_html(stdout)}<p><a href="{url}">Full View</a></p>'
+        html = f'{_terminal_placeholder("stdout")}<p><a href="{url}">Full View</a></p>'
         return cast(SafeString, mark_safe(html))
 
     @admin.display(description="Standard error / traceback")
     def stderr_display(self, obj: CommandExecution) -> SafeString:
-        stderr = str(obj.stderr)
-        if not stderr:
+        if not obj.has_output("stderr"):
             return cast(SafeString, mark_safe("<em>—</em>"))
         url = reverse(
             "admin:django_admin_runner_commandexecution_stderr",
             args=[obj.pk],
         )
-        html = f'{_ansi_to_html(stderr)}<p><a href="{url}">Full View</a></p>'
+        html = f'{_terminal_placeholder("stderr")}<p><a href="{url}">Full View</a></p>'
         return cast(SafeString, mark_safe(html))
 
     @admin.display(description="Result")
@@ -271,7 +321,7 @@ class CommandExecutionAdmin(_ModelAdminBase):  # type: ignore[misc]
                 f'background:#28a745;text-decoration:none;margin-right:4px;"'
                 f">View</a>"
             )
-        if obj.stdout:
+        if getattr(obj, "has_stdout", False) or obj.has_output("stdout"):
             url = reverse(
                 "admin:django_admin_runner_commandexecution_stdout",
                 args=[obj.pk],
@@ -283,7 +333,7 @@ class CommandExecutionAdmin(_ModelAdminBase):  # type: ignore[misc]
                 f'background:#0d6efd;text-decoration:none;margin-right:4px;"'
                 f">Stdout</a>"
             )
-        if obj.stderr:
+        if getattr(obj, "has_stderr", False) or obj.has_output("stderr"):
             url = reverse(
                 "admin:django_admin_runner_commandexecution_stderr",
                 args=[obj.pk],
@@ -303,10 +353,30 @@ class CommandExecutionAdmin(_ModelAdminBase):  # type: ignore[misc]
         return False
 
     def get_queryset(self, request):
-        qs = super().get_queryset(request)
+        from django.db.models import Exists, OuterRef
+
+        qs = (
+            super()
+            .get_queryset(request)
+            .annotate(
+                has_stdout=Exists(
+                    CommandOutputPart.objects.filter(execution=OuterRef("pk"), field="stdout")
+                ),
+                has_stderr=Exists(
+                    CommandOutputPart.objects.filter(execution=OuterRef("pk"), field="stderr")
+                ),
+            )
+        )
         if request.user.has_perm("django_admin_runner.view_all_executions"):
             return qs
         return qs.filter(triggered_by=request.user)
+
+    def change_view(self, request, object_id, form_url="", extra_context=None):
+        extra_context = extra_context or {}
+        extra_context.update(
+            self._terminal_context("admin:django_admin_runner_commandexecution_output", object_id)
+        )
+        return super().change_view(request, object_id, form_url, extra_context)
 
     # ------------------------------------------------------------------
     # Extra URLs: command list + run form
@@ -335,6 +405,16 @@ class CommandExecutionAdmin(_ModelAdminBase):  # type: ignore[misc]
                 self.admin_site.admin_view(self._stderr_view),
                 name="django_admin_runner_commandexecution_stderr",
             ),
+            path(
+                "<path:object_id>/output/",
+                self.admin_site.admin_view(self._output_view),
+                name="django_admin_runner_commandexecution_output",
+            ),
+            path(
+                "<path:object_id>/output/part/<int:seq>/",
+                _staff_view(self._output_part_view),
+                name="django_admin_runner_commandexecution_output_part",
+            ),
         ]
         return custom + urls
 
@@ -345,28 +425,6 @@ class CommandExecutionAdmin(_ModelAdminBase):  # type: ignore[misc]
             raise Http404
         return execution
 
-    def _render_output(
-        self,
-        request,
-        execution: CommandExecution,
-        title: str,
-        content: SafeString,
-    ) -> HttpResponse:
-        change_url = reverse(
-            "admin:django_admin_runner_commandexecution_change",
-            args=[execution.pk],
-        )
-        context = {
-            **self.admin_site.each_context(request),
-            "title": title,
-            "execution": execution,
-            "content": content,
-            "change_url": change_url,
-            "opts": self.model._meta,
-            "is_unfold": is_unfold_installed(),
-        }
-        return render(request, get_template("result"), context)
-
     def _result_view(self, request, object_id):
         """Standalone result page: result_html if set, otherwise stdout."""
         execution = self._get_execution(request, object_id)
@@ -374,39 +432,198 @@ class CommandExecutionAdmin(_ModelAdminBase):  # type: ignore[misc]
         if execution.result_html:
             content = cast(SafeString, mark_safe(execution.result_html))
         else:
-            stdout = str(execution.stdout)
-            content = _ansi_to_html(stdout) if stdout else cast(SafeString, mark_safe(""))
+            content = _terminal_placeholder("stdout")
 
-        return self._render_output(
-            request,
-            execution,
-            f"Result: {execution.command_name}",
-            content,
-        )
+        context = {
+            **self._render_output_context(request, execution, f"Result: {execution.command_name}"),
+            "content": content,
+        }
+        return render(request, get_template("result"), context)
 
     def _stdout_view(self, request, object_id):
         """Standalone stdout page."""
         execution = self._get_execution(request, object_id)
-        stdout = str(execution.stdout)
-        content = _ansi_to_html(stdout) if stdout else cast(SafeString, mark_safe("<em>—</em>"))
-        return self._render_output(
-            request,
-            execution,
-            f"Output: {execution.command_name}",
-            content,
-        )
+        content = _terminal_placeholder("stdout")
+        context = {
+            **self._render_output_context(request, execution, f"Output: {execution.command_name}"),
+            "content": content,
+        }
+        return render(request, get_template("result"), context)
 
     def _stderr_view(self, request, object_id):
         """Standalone stderr/traceback page."""
         execution = self._get_execution(request, object_id)
-        stderr = str(execution.stderr)
-        content = _ansi_to_html(stderr) if stderr else cast(SafeString, mark_safe("<em>—</em>"))
-        return self._render_output(
-            request,
-            execution,
-            f"Traceback: {execution.command_name}",
-            content,
+        content = _terminal_placeholder("stderr")
+        context = {
+            **self._render_output_context(
+                request, execution, f"Traceback: {execution.command_name}"
+            ),
+            "content": content,
+        }
+        return render(request, get_template("result"), context)
+
+    def _terminal_context(self, url_name: str, object_id) -> dict:
+        """Context needed by the terminal widget (config JSON in templates)."""
+        from .models import CommandExecution
+
+        execution = CommandExecution.objects.filter(pk=object_id).first()
+        cols, rows = _terminal_size()
+        from .tasks import _flush_interval_for_command
+
+        poll_interval_ms = (
+            int(
+                _flush_interval_for_command(execution.command_name) * 1000,
+            )
+            if execution
+            else 500
         )
+        part_url = reverse(
+            "admin:django_admin_runner_commandexecution_output_part",
+            args=[object_id, 0],
+        )
+        return {
+            "dar_output_url": reverse(url_name, args=[object_id]),
+            "dar_output_part_url": part_url,
+            "dar_term_cols": cols,
+            "dar_term_rows": rows,
+            "dar_poll_interval": poll_interval_ms,
+            "stdout_url": reverse(
+                "admin:django_admin_runner_commandexecution_stdout",
+                args=[object_id],
+            ),
+            "stderr_url": reverse(
+                "admin:django_admin_runner_commandexecution_stderr",
+                args=[object_id],
+            ),
+            "dar_started_at": (
+                execution.started_at.isoformat(timespec="milliseconds")
+                if execution and execution.started_at
+                else ""
+            ),
+        }
+
+    def _output_view(self, request, object_id):
+        """JSON delta endpoint: output written after an opaque cursor.
+
+        ``?field=stdout|stderr&cursor=<seq>:<offset>`` →
+        ``{status, chunk, cursor, finished, reset}``.  An empty/missing
+        cursor replays from the start.  When the client cursor points at a
+        pruned part, ``reset: true`` is returned together with the full
+        retained output so the widget can reset and replay.
+        """
+        execution = self._get_execution(request, object_id)
+
+        field = request.GET.get("field", "")
+        if field not in _OUTPUT_FIELDS:
+            return HttpResponseBadRequest(f"Invalid field: {field!r}".encode())
+
+        try:
+            cursor = _parse_cursor(request.GET.get("cursor", ""))
+        except ValueError:
+            return HttpResponseBadRequest(b"Invalid cursor")
+
+        parts = list(execution.output_parts_for(field).values_list("seq", "text"))
+        finished = execution.status in (
+            CommandExecution.Status.SUCCESS,
+            CommandExecution.Status.FAILED,
+        )
+        if not parts:
+            return JsonResponse(
+                {
+                    "status": execution.status,
+                    "chunk": "",
+                    "cursor": "",
+                    "finished": finished,
+                    "reset": False,
+                }
+            )
+
+        last_seq, last_text = parts[-1]
+        end_cursor = f"{last_seq}:{len(last_text)}"
+
+        reset = False
+        if cursor is None:
+            chunk = "".join(text for _, text in parts)
+        else:
+            c_seq, c_off = cursor
+            index = next((i for i, (seq, _) in enumerate(parts) if seq == c_seq), None)
+            if index is None:
+                # Cursor predates pruned parts: send everything retained.
+                reset = True
+                chunk = "".join(text for _, text in parts)
+            else:
+                _, text = parts[index]
+                chunk = text[c_off:] + "".join(t for _, t in parts[index + 1 :])
+
+        return JsonResponse(
+            {
+                "status": execution.status,
+                "chunk": chunk,
+                "cursor": end_cursor,
+                "finished": finished,
+                "reset": reset,
+            }
+        )
+
+    def _output_part_view(self, request, object_id, seq: int):
+        """Serve one output part whole, with immutable caching when sealed.
+
+        Sealed parts (every part except the active/last one) never change,
+        so they are served with an ETag and ``Cache-Control: immutable`` —
+        repeat opens hit the browser cache instead of the server.
+        """
+        execution = self._get_execution(request, object_id)
+
+        field = request.GET.get("field", "")
+        if field not in _OUTPUT_FIELDS:
+            return HttpResponseBadRequest(f"Invalid field: {field!r}".encode())
+
+        part = (
+            execution.output_parts_for(field).filter(seq=seq).values_list("text", flat=True).first()
+        )
+        if part is None:
+            raise Http404
+
+        etag = f'"{execution.pk}:{field}:{seq}"'
+        if request.headers.get("If-None-Match") == etag:
+            response = HttpResponse(status=304)
+        else:
+            response = HttpResponse(part, content_type="text/plain; charset=utf-8")
+        response.headers["ETag"] = etag
+        last_seq = (
+            execution.output_parts_for(field).order_by("-seq").values_list("seq", flat=True).first()
+        )
+        # Lets the widget render a replay progress bar (loaded / total parts).
+        response.headers["X-Dar-Total-Parts"] = str(last_seq + 1 if last_seq is not None else 0)
+        if last_seq is not None and seq < last_seq:
+            # Sealed part: immutable, cacheable for a year.
+            response.headers["Cache-Control"] = "private, max-age=31536000, immutable"
+        else:
+            # Active part: content may still grow.
+            response.headers["Cache-Control"] = "no-cache"
+        return response
+
+    def _render_output_context(self, request, execution, title):
+        """Build context shared by stdout/stderr/result views."""
+        change_url = reverse(
+            "admin:django_admin_runner_commandexecution_change",
+            args=[execution.pk],
+        )
+        ctx = self._terminal_context(
+            "admin:django_admin_runner_commandexecution_output", execution.pk
+        )
+        return {
+            **self.admin_site.each_context(request),
+            "title": title,
+            "execution": execution,
+            "change_url": change_url,
+            "dar_status": execution.status,
+            "has_stderr": execution.has_output("stderr"),
+            "has_stdout": execution.has_output("stdout"),
+            "opts": self.model._meta,
+            "is_unfold": is_unfold_installed(),
+            **ctx,
+        }
 
     def _command_run_view(self, request, command_name: str):
         if command_name not in _registry:
@@ -448,3 +665,26 @@ class CommandExecutionAdmin(_ModelAdminBase):  # type: ignore[misc]
             "is_unfold": is_unfold_installed(),
         }
         return render(request, get_template("run"), context)
+
+
+@admin.register(CommandOutputPart)
+class CommandOutputPartAdmin(_ModelAdminBase):  # type: ignore[misc]
+    """Read-only admin for the raw output parts (debugging/inspection)."""
+
+    list_display = ["execution", "field", "seq", "length"]
+    list_filter = ["field"]
+    search_fields = ["execution__command_name"]
+    ordering = ["execution", "field", "seq"]
+
+    @admin.display(description="Length")
+    def length(self, obj: CommandOutputPart) -> int:
+        return len(str(obj.text))
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return request.user.is_superuser

@@ -147,13 +147,21 @@ class TestResultView:
             command_name="simple_command",
             triggered_by=superuser,
             status="SUCCESS",
-            stdout="Hello world output",
         )
+        from django_admin_runner.tasks import _append_output
+
+        _append_output(execution, "stdout", "Hello world output")
         url = reverse("admin:django_admin_runner_commandexecution_result", args=[execution.pk])
         response = admin_client.get(url)
         assert response.status_code == 200
         content = response.content.decode()
-        assert "Hello world output" in content
+        # stdout is rendered by the terminal widget, replayed from the delta
+        # endpoint rather than embedded in the HTML
+        assert 'data-dar-field="stdout"' in content
+        output_url = reverse(
+            "admin:django_admin_runner_commandexecution_output", args=[execution.pk]
+        )
+        assert output_url in content
 
     def test_result_view_404_for_invalid_pk(self, admin_client):
         url = reverse("admin:django_admin_runner_commandexecution_result", args=[99999])

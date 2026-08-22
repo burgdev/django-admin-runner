@@ -16,25 +16,6 @@ TBD - update Purpose after archive.
 - **WHEN** a command calls `set_result_html("<div>Done</div>")` during execution
 - **THEN** the `CommandExecution.result_html` field SHALL contain `"<div>Done</div>"` after the execution completes
 
-### Requirement: URL auto-linking in ANSI output
-The ANSI-to-HTML renderer SHALL convert URLs (matching `https?://\S+`) in stdout and stderr to clickable `<a>` tags with `target="_blank"`.
-
-#### Scenario: URL in stdout becomes clickable
-- **WHEN** stdout contains `File saved to https://example.com/export.csv`
-- **THEN** the rendered HTML SHALL contain `<a href="https://example.com/export.csv" target="_blank">https://example.com/export.csv</a>`
-
-#### Scenario: URL without protocol is not linked
-- **WHEN** stdout contains `example.com/file.csv` without `http://` or `https://`
-- **THEN** it SHALL NOT be converted to a link
-
-#### Scenario: URL alongside ANSI color codes
-- **WHEN** stdout contains ANSI-colored text with an embedded URL
-- **THEN** the URL SHALL be converted to a link and the surrounding ANSI formatting SHALL be preserved
-
-#### Scenario: Multiple URLs in output
-- **WHEN** stdout contains multiple URLs on different lines
-- **THEN** each URL SHALL be independently converted to a clickable link
-
 ### Requirement: Standalone result view
 The admin SHALL provide a standalone result view at `/admin/django_admin_runner/commandexecution/<pk>/result/` that renders the execution result as a full page.
 

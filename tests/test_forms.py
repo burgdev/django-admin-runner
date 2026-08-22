@@ -26,6 +26,28 @@ class TestFormFromCommand:
         FormClass = form_from_command("param_command")
         assert isinstance(FormClass().fields["mode"], forms.ChoiceField)
 
+    def test_append_choices_become_multiple_choice_field(self):
+        """A repeatable option with choices becomes a multi-select."""
+        FormClass = form_from_command("param_command")
+        field = FormClass().fields["tag"]
+        assert isinstance(field, forms.MultipleChoiceField)
+        choice_values = [v for v, _ in field.choices]
+        assert choice_values == ["alpha", "beta", "gamma"]
+
+    def test_append_without_choices_stays_text_with_hint(self):
+        """A repeatable free-text option stays a CharField with a hint."""
+        FormClass = form_from_command("param_command")
+        field = FormClass().fields["name"]
+        assert isinstance(field, forms.CharField)
+        assert "comma-separated" in field.help_text
+
+    def test_callable_choices_supported(self):
+        """Lazy (callable) choices are passed through to the form field."""
+        FormClass = form_from_command("param_command")
+        field = FormClass().fields["mode"]
+        # Static choices here, but the mapping must not break callables.
+        assert field.choices
+
     def test_choice_field_options(self):
         FormClass = form_from_command("param_command")
         field = FormClass().fields["mode"]

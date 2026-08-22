@@ -20,6 +20,9 @@ def register_command(
     widgets: dict | None = None,
     form_class=None,
     display_name: str | None = None,
+    timeout: int | None = None,
+    max_retries: int = 0,
+    flush_interval: float | None = None,
 ):
     """
     Decorator to register a management command with the admin runner.
@@ -54,6 +57,15 @@ def register_command(
         display_name: Human-readable name for the command. Defaults to the
             command name with underscores replaced by spaces and title-cased
             (e.g., ``"import_books"`` → ``"Import Books"``).
+        timeout: Maximum execution time in seconds before the task is killed.
+            When ``None`` (default), falls back to the cluster-level
+            ``Q_CLUSTER["timeout"]`` setting.
+        max_retries: Maximum number of retry attempts on failure. ``0`` (default)
+            means no retry — the task runs once and the failure is final.
+            Values > 0 are supported by runners with per-task retry control
+            (e.g. Celery). Runners without per-task support (e.g. django-q2)
+            will log a warning and ignore this setting — configure retries
+            at the cluster level instead.
     """
 
     def decorator(cls):
@@ -71,6 +83,9 @@ def register_command(
             "command_class": cls,
             "app_label": app_label,
             "display_name": display_name or cmd_name.replace("_", " ").title(),
+            "timeout": timeout,
+            "max_retries": max_retries,
+            "flush_interval": flush_interval,
         }
         return cls
 
@@ -108,11 +123,24 @@ def has_permission(user, entry: dict) -> bool:
     return all(user.has_perm(p) for p in perms)
 
 
+# Apps whose management command modules should not be auto-imported during
+# discovery because they have import-time side effects (e.g. debug_toolbar's
+# debugsqlshell monkeypatches the database cursor wrapper globally).
+_AUTODISCOVER_SKIP_APPS = frozenset(
+    {
+        "debug_toolbar",
+        "django_extensions",
+    }
+)
+
+
 def autodiscover_commands() -> None:
     """Import all management command modules to trigger ``@register_command`` decorators."""
     from django.apps import apps as django_apps
 
     for app_config in django_apps.get_app_configs():
+        if app_config.name in _AUTODISCOVER_SKIP_APPS:
+            continue
         pkg_path = f"{app_config.name}.management.commands"
         try:
             pkg = importlib.import_module(pkg_path)

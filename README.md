@@ -19,6 +19,15 @@
 - **Built-in file fields** — `FileOrPathField` (upload or server path), `FileField`, `ImageField`
 - **Pluggable runners** — Django Tasks (default), Celery, sync, or custom
 - **Execution log** — every run is stored as a `CommandExecution` record
+- **Terminal output** — stdout/stderr render in an embedded xterm.js terminal
+  (vendored, no CDN): progress bars display as in a real terminal. Output is
+  stored as append-only 512 KB parts, so live updates cost only the new
+  characters and arrive every 250 ms regardless of output size; a cursor-based
+  delta endpoint transfers just the delta, sealed parts are served
+  browser-cacheable (immutable), and retention is capped per field at 500 MB
+  (`ADMIN_RUNNER_MAX_OUTPUT`) by pruning the oldest parts. Terminal size is
+  configurable (`ADMIN_RUNNER_TERM_COLS`/`ADMIN_RUNNER_TERM_ROWS`, default
+  120×40) and exported as `COLUMNS`/`LINES` so output layout is deterministic.
 - **Permission control** — per-command permission requirements (superuser, Django perms, or a list)
 - **Model attachment** — show a "Run" button on any model's admin change-list via `models=[...]`
 - **Unfold support** — auto-detected, uses Unfold templates and widgets when available

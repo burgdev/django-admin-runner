@@ -12,7 +12,25 @@
 </div>
 {% endblock %}
 
-{% block extrastyle %}{{ block.super }}<link rel="stylesheet" href="{% static 'django_admin_runner/ansi-output.css' %}">{% endblock %}
+{% block extrastyle %}{{ block.super }}<link rel="stylesheet" href="{% static 'django_admin_runner/vendor/xterm/xterm.css' %}"><link rel="stylesheet" href="{% static 'django_admin_runner/ansi-output.css' %}">{% endblock %}
+
+{% block extrahead %}{{ block.super }}
+<script id="dar-terminal-config" type="application/json">
+{
+    "outputUrl": "{{ dar_output_url }}",
+    "partUrl": "{{ dar_output_part_url }}",
+    "status": "{{ execution.status }}",
+    "cols": {{ dar_term_cols }},
+    "rows": {{ dar_term_rows }},
+    "pollInterval": {{ dar_poll_interval }},
+    "stdoutUrl": "{{ stdout_url }}",
+    "stderrUrl": "{{ stderr_url }}",
+    "startedAt": "{{ dar_started_at }}"
+}
+</script>
+<script src="{% static 'django_admin_runner/vendor/xterm/xterm.js' %}"></script>
+<script src="{% static 'django_admin_runner/terminal-output.js' %}"></script>
+{% endblock %}
 
 {% block content %}
 <div class="rounded-default border border-base-200 dark:border-base-700 overflow-hidden">
@@ -26,8 +44,26 @@
     </a>
   </div>
 
-  <div class="p-6">
+  <div class="p-6 dar-output-container">
     {{ content }}
   </div>
+
+  {% if execution.status == "SUCCESS" or execution.status == "FAILED" %}
+  <div class="px-6 py-3 border-t border-base-200 dark:border-base-700 flex items-center gap-4 text-sm">
+    {% if execution.status == "SUCCESS" %}
+      <span class="font-medium text-green-600 dark:text-green-400">{% trans "Successfully finished" %}</span>
+    {% else %}
+      <span class="font-medium text-red-600 dark:text-red-400">{% trans "Failed" %}</span>
+    {% endif %}
+    {% if has_stderr and execution.status == "FAILED" %}
+      <span class="text-base-400">|</span>
+      <a href="{{ stderr_url }}" class="text-red-600 dark:text-red-400 hover:underline">{% trans "View stderr" %}</a>
+    {% endif %}
+    {% if has_stdout and execution.status == "FAILED" %}
+      <span class="text-base-400">|</span>
+      <a href="{{ stdout_url }}" class="text-primary-600 dark:text-primary-400 hover:underline">{% trans "View stdout" %}</a>
+    {% endif %}
+  </div>
+  {% endif %}
 </div>
 {% endblock %}
