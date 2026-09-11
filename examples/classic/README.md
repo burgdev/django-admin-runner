@@ -24,6 +24,12 @@ Visit <http://localhost:8765/admin/> (login: `root` / `root`) and navigate to
   - **Export Report** (`export_report`) — exports in CSV/JSON/XLSX format via a
     choice field; `--output-path` hidden from the form via `hidden=True`
 
+> **Note on scheduling**: django-admin-runner's "Add schedule" admin action and
+> `@register_command(schedule=…)` declarations are backend-dependent
+> capabilities (implemented for django-q2). The synchronous runner used by
+> this example has no periodic-task support, so the action is hidden here —
+> see the `unfold_django_q2` example for a full demo.
+
 ## Available `make` targets
 
 ```

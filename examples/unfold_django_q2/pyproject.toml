@@ -3,7 +3,7 @@ name = "example-unfold-django-q2"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
-    "django-admin-runner[django-q2,unfold]",
+    "django-admin-runner[django-q2,unfold,rich]",
     "croniter>=3.0",
 ]
 

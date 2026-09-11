@@ -14,6 +14,60 @@ class CeleryCommandRunner(BaseCommandRunner):
 
     backend = "celery"
     supports_max_retries = True
+    supports_force_stop = True
+
+    def _revoke(self, execution, signal: str) -> None:
+        """Revoke the execution's task, terminating a running worker."""
+        if not execution.task_id:
+            return
+        from celery import current_app
+
+        current_app.control.revoke(
+            execution.task_id,
+            terminate=True,
+            signal=signal,
+        )
+
+    def stop(self, execution) -> None:
+        """Graceful stop: stop flag (heartbeat) + revoke with SIGTERM."""
+        super().stop(execution)
+        self._revoke(execution, "SIGTERM")
+
+    def force_stop(self, execution) -> bool:
+        """Hard kill: revoke with SIGKILL."""
+        if not execution.task_id:
+            return False
+        self._revoke(execution, "SIGKILL")
+        return True
+
+    def finalize_stale(self, execution):
+        """Attribute a swept execution via the Celery result backend.
+
+        REVOKED tasks (e.g. killed by a hard ``time_limit`` revoke) are
+        reported as TIMEOUT; FAILURE as FAILED. Best effort — an
+        unreachable broker yields ``None`` (generic FAILED).
+        """
+        if not execution.task_id:
+            return None
+        try:
+            from celery.result import AsyncResult
+
+            state = AsyncResult(execution.task_id).state
+        except Exception:  # noqa: BLE001 - attribution must never break the sweep
+            return None
+        from django_admin_runner.models import CommandExecution
+
+        if state == "REVOKED":
+            return (
+                CommandExecution.Status.TIMEOUT,
+                "Revoked/killed by Celery (hard time limit or revoke).",
+            )
+        if state == "FAILURE":
+            return (
+                CommandExecution.Status.FAILED,
+                "Worker died; Celery recorded a task failure.",
+            )
+        return None
 
     def run(self, command_name, kwargs, triggered_by, execution) -> RunResult:
         from django_admin_runner.celery_tasks import get_celery_task

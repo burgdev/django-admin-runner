@@ -78,7 +78,8 @@ screen, and replays the retained output with a truncation notice.
 | --- | --- | --- |
 | `ADMIN_RUNNER_MAX_OUTPUT` | `500_000_000` | Total characters of output retained per field (stdout/stderr). The oldest sealed parts are pruned beyond this cap. |
 | `ADMIN_RUNNER_TERM_COLS` | `120` | Terminal width exported as `COLUMNS` during command execution and used to size the widget, so output layout (e.g. progress bar width) is deterministic. |
-| `ADMIN_RUNNER_TERM_ROWS` | `40` | Terminal height exported as `LINES` during command execution and used to size the widget. |
+| `ADMIN_RUNNER_TERM_ROWS` | `40` | Terminal height exported as `LINES` during command execution (e.g. rich lays out panels for this height). |
+| `ADMIN_RUNNER_TERM_VIEW_ROWS` | `20` | Visible height of the embedded terminal widget. Taller output scrolls in the widget's scrollback. |
 
 Terminal dimensions are a global setting — they apply to future runs and do
 not depend on the caller's or browser's terminal size. URLs in output are not

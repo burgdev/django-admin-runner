@@ -7,6 +7,7 @@
 * [Guides](guides/guides.md)
     * [Decorator](guides/decorator.md)
     * [Runners](guides/runners.md)
+    * [Stopping Commands](guides/stopping-commands.md)
     * [Custom Runner](guides/custom-runner.md)
     * [Execution Context](guides/execution-context.md)
     * [Hooks](guides/hooks.md)

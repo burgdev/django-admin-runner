@@ -46,10 +46,51 @@
       <p>{% trans "This command has no configurable parameters." %}</p>
     {% endif %}
 
+    <fieldset class="module aligned">
+      <div class="form-row">
+        <label for="dar_label">{% trans "Label" %}</label>
+        <input type="text" name="dar_label" id="dar_label" maxlength="200"
+               autocomplete="off" placeholder="{% trans 'Optional label for this run' %}">
+        <p class="help">{% trans "Shown in the results list for later reference." %}</p>
+      </div>
+    </fieldset>
+
     <div class="submit-row">
       <input type="submit" value="{% trans "Run command" %}" class="default">
+      {% if add_schedule_url %}
+      <a href="{{ add_schedule_url }}" id="dar-add-schedule-link">{% trans "Add schedule" %}</a>
+      {% endif %}
       <a href="{% url 'admin:django_admin_runner_registeredcommand_changelist' %}">{% trans "Cancel" %}</a>
     </div>
   </form>
 </div>
+{% endblock %}
+
+{% block footer %}{{ block.super }}
+{% if add_schedule_url %}
+{# Carry the parameters already filled in on the run form to the schedule form. #}
+<script>(function () {
+  var link = document.getElementById('dar-add-schedule-link');
+  var form = link ? link.closest('form') : null;
+  if (!link || !form) return;
+  link.addEventListener('click', function (e) {
+    e.preventDefault();
+    var params = new URLSearchParams();
+    Array.prototype.forEach.call(form.elements, function (el) {
+      if (!el.name || el.type === 'file' || el.tagName === 'BUTTON') return;
+      if (el.type === 'checkbox' || el.type === 'radio') {
+        if (el.checked) params.append(el.name, el.value || 'on');
+      } else if (el.multiple && el.selectedOptions) {
+        Array.prototype.forEach.call(el.selectedOptions, function (opt) {
+          params.append(el.name, opt.value);
+        });
+      } else if (el.value !== '' && el.value !== null) {
+        params.append(el.name, el.value);
+      }
+    });
+    var qs = params.toString();
+    window.location.href = link.href + (qs ? '?' + qs : '');
+  });
+})();</script>
+{% endif %}
 {% endblock %}

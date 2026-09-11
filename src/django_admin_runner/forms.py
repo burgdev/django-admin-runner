@@ -310,6 +310,35 @@ class _TypedCharField(forms.CharField):
             raise ValidationError(str(exc) or "Enter a valid value.", code="invalid") from exc
 
 
+def validate_command_kwargs(command_name: str, kwargs: dict) -> None:
+    """Validate stored *kwargs* against the command's current argparse form.
+
+    Rejects options the command no longer defines (stale schedules) and
+    missing required arguments.  Raises ``ValidationError`` with an
+    actionable message; returns silently when the kwargs are compatible.
+    """
+    FormClass = form_from_command(command_name)
+    fields: dict[str, forms.Field] = getattr(FormClass, "base_fields", {})
+    unknown = [key for key in kwargs if key not in fields]
+    if unknown:
+        raise ValidationError(
+            f"Unknown parameter(s) no longer provided by command '{command_name}': "
+            f"{', '.join(sorted(unknown))}.",
+            code="unknown",
+        )
+    missing = [
+        name
+        for name, field in fields.items()
+        if field.required and name not in kwargs and field.initial is None
+    ]
+    if missing:
+        raise ValidationError(
+            f"Missing required parameter(s) for command '{command_name}': "
+            f"{', '.join(sorted(missing))}.",
+            code="missing",
+        )
+
+
 def _action_to_field(action: argparse.Action) -> forms.Field | None:
     """Map an argparse *action* to the appropriate Django form field.
 

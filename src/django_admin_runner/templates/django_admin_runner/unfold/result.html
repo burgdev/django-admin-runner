@@ -12,7 +12,7 @@
 </div>
 {% endblock %}
 
-{% block extrastyle %}{{ block.super }}<link rel="stylesheet" href="{% static 'django_admin_runner/vendor/xterm/xterm.css' %}"><link rel="stylesheet" href="{% static 'django_admin_runner/ansi-output.css' %}">{% endblock %}
+{% block extrastyle %}{{ block.super }}<link rel="stylesheet" href="{% static 'django_admin_runner/vendor/xterm/xterm.css' %}?v=2026-08-27-2"><link rel="stylesheet" href="{% static 'django_admin_runner/ansi-output.css' %}?v=2026-08-27-2"><link rel="stylesheet" href="{% static 'django_admin_runner/terminals.css' %}?v=2026-09-06-6">{% endblock %}
 
 {% block extrahead %}{{ block.super }}
 <script id="dar-terminal-config" type="application/json">
@@ -22,14 +22,17 @@
     "status": "{{ execution.status }}",
     "cols": {{ dar_term_cols }},
     "rows": {{ dar_term_rows }},
+    "fit": {{ dar_fit|default:"false" }},
     "pollInterval": {{ dar_poll_interval }},
     "stdoutUrl": "{{ stdout_url }}",
     "stderrUrl": "{{ stderr_url }}",
     "startedAt": "{{ dar_started_at }}"
 }
 </script>
-<script src="{% static 'django_admin_runner/vendor/xterm/xterm.js' %}"></script>
-<script src="{% static 'django_admin_runner/terminal-output.js' %}"></script>
+<script src="{% static 'django_admin_runner/vendor/xterm/xterm.js' %}?v=2026-08-27-2"></script>
+<script src="{% static 'django_admin_runner/vendor/xterm/addon-webgl.js' %}?v=2026-09-03"></script>
+<script src="{% static 'django_admin_runner/vendor/xterm/addon-fit.js' %}?v=2026-09-06"></script>
+<script src="{% static 'django_admin_runner/terminal-output.js' %}?v=2026-09-06-5"></script>
 {% endblock %}
 
 {% block content %}
@@ -38,20 +41,39 @@
     <span class="font-semibold text-sm text-font-important-light dark:text-font-important-dark">
       {{ title }}
     </span>
-    <a href="{{ change_url }}"
-       class="text-sm font-medium text-primary-600 dark:text-primary-400 hover:underline">
-      {% trans "Back to detail" %}
-    </a>
+    <span class="flex items-center gap-3">
+      <span id="dar-stop-control">
+      {% if dar_stop_url %}
+      <form method="post" action="{{ dar_stop_url }}">
+        {% csrf_token %}
+        {% if dar_stop_force %}
+        <input type="hidden" name="force" value="1">
+        <button type="submit" class="bg-red-600 hover:bg-red-700 text-white font-semibold text-xs rounded px-3 py-1.5">{% trans "Force Stop" %}</button>
+        {% else %}
+        <button type="submit" class="bg-red-600 hover:bg-red-700 text-white font-semibold text-xs rounded px-3 py-1.5">{% trans "Stop" %}</button>
+        {% endif %}
+      </form>
+      {% endif %}
+      </span>
+      <a href="{{ change_url }}"
+         class="text-sm font-medium text-primary-600 dark:text-primary-400 hover:underline">
+        {% trans "Back to detail" %}
+      </a>
+    </span>
   </div>
 
   <div class="p-6 dar-output-container">
     {{ content }}
   </div>
 
-  {% if execution.status == "SUCCESS" or execution.status == "FAILED" %}
+  {% if execution.status == "SUCCESS" or execution.status == "FAILED" or execution.status == "CANCELLED" or execution.status == "TIMEOUT" %}
   <div class="px-6 py-3 border-t border-base-200 dark:border-base-700 flex items-center gap-4 text-sm">
     {% if execution.status == "SUCCESS" %}
       <span class="font-medium text-green-600 dark:text-green-400">{% trans "Successfully finished" %}</span>
+    {% elif execution.status == "CANCELLED" %}
+      <span class="font-medium text-amber-600 dark:text-amber-400">{% trans "Cancelled" %}</span>
+    {% elif execution.status == "TIMEOUT" %}
+      <span class="font-medium text-red-600 dark:text-red-400">{% trans "Timed out" %}</span>
     {% else %}
       <span class="font-medium text-red-600 dark:text-red-400">{% trans "Failed" %}</span>
     {% endif %}

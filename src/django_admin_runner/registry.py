@@ -23,6 +23,7 @@ def register_command(
     timeout: int | None = None,
     max_retries: int = 0,
     flush_interval: float | None = None,
+    schedule=None,
 ):
     """
     Decorator to register a management command with the admin runner.
@@ -66,6 +67,14 @@ def register_command(
             (e.g. Celery). Runners without per-task support (e.g. django-q2)
             will log a warning and ignore this setting — configure retries
             at the cluster level instead.
+        schedule: Declarative schedule(s) for this command — a single
+            :class:`~django_admin_runner.schedules.Schedule` (e.g.
+            ``CronSchedule("15 4 * * *")``) or a sequence of them. A single
+            declaration defaults its name to the command name; sequences
+            must declare explicit, unique names (identity is
+            ``(command_name, name)`` — reordering never rewires schedules).
+            The startup sync materializes them as ``source=code`` rows;
+            the registry wins for the spec, the DB wins for ``enabled``.
     """
 
     def decorator(cls):
@@ -86,10 +95,34 @@ def register_command(
             "timeout": timeout,
             "max_retries": max_retries,
             "flush_interval": flush_interval,
+            "schedules": _normalize_schedules(schedule, cmd_name),
         }
         return cls
 
     return decorator
+
+
+def _normalize_schedules(schedule, cmd_name: str) -> list:
+    """Normalize the ``schedule=`` declaration to a list of named schedules."""
+    from .schedules import Schedule
+
+    if schedule is None:
+        return []
+    schedules = [schedule] if isinstance(schedule, Schedule) else list(schedule)
+    single = isinstance(schedule, Schedule)
+    names: list[str] = []
+    for sched in schedules:
+        if not isinstance(sched, Schedule):
+            raise TypeError(f"schedule entries must be Schedule instances, got {sched!r}.")
+        if single and not sched.name:
+            # Single declaration defaults its name to the command name.
+            object.__setattr__(sched, "name", cmd_name)
+        if not sched.name:
+            raise ValueError("Multiple schedules per command must declare explicit, unique names.")
+        if sched.name in names:
+            raise ValueError(f"Duplicate schedule name {sched.name!r} on command {cmd_name!r}.")
+        names.append(sched.name)
+    return schedules
 
 
 def _module_to_command_name(module: str) -> str:

@@ -151,7 +151,7 @@ class TestPartEndpoint:
         assert response.status_code == 200
         assert response.content.decode() == "a" * 100
         assert response.headers["Cache-Control"] == "private, max-age=31536000, immutable"
-        assert response.headers["ETag"] == f'"{ex.pk}:stdout:0"'
+        assert response.headers["ETag"] == f'"{ex.pk}:stdout:0:100"'
         assert response.headers["X-Dar-Total-Parts"] == "3"
 
     def test_active_part_not_immutable(self, admin_client, superuser, monkeypatch):
@@ -161,11 +161,30 @@ class TestPartEndpoint:
 
     def test_etag_304(self, admin_client, superuser, monkeypatch):
         ex = self._make(superuser, monkeypatch)
-        etag = f'"{ex.pk}:stdout:0"'
+        etag = f'"{ex.pk}:stdout:0:100"'
         response = admin_client.get(
             _part_url(ex.pk, 0), {"field": "stdout"}, HTTP_IF_NONE_MATCH=etag
         )
         assert response.status_code == 304
+
+    def test_grown_active_part_not_304(self, admin_client, superuser, monkeypatch):
+        """A revalidated active part that grew must be served, not 304'd.
+
+        Regression test: the ETag had no content component, so reloading a
+        page after the command finished served a stale truncated part from
+        the browser cache (missing final output lines).
+        """
+        from django_admin_runner.tasks import _append_output
+
+        ex = self._make(superuser, monkeypatch)
+        # PART_SIZE is 100: parts 0/1 are sealed, part 2 (50 chars) is active.
+        _append_output(ex, "stdout", "y" * 50)  # the active part grows
+        stale_etag = f'"{ex.pk}:stdout:2:50"'
+        response = admin_client.get(
+            _part_url(ex.pk, 2), {"field": "stdout"}, HTTP_IF_NONE_MATCH=stale_etag
+        )
+        assert response.status_code == 200
+        assert response.content.decode() == "a" * 50 + "y" * 50
 
     def test_missing_part_404(self, admin_client, superuser, monkeypatch):
         ex = self._make(superuser, monkeypatch)

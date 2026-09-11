@@ -57,6 +57,43 @@ class TestRegisteredCommandAdminChangelist:
         assert response.status_code == 302
         assert "active=1" in response.url
 
+    def _group_url(self, groups: str) -> str:
+        return reverse("admin:django_admin_runner_registeredcommand_group", args=[groups])
+
+    def test_group_view_filters_and_hides_filters(self, admin_client):
+        self._create_commands()
+        RegisteredCommand.objects.create(
+            name="other_cmd", group="G2", display_name="Other", active=True
+        )
+        response = admin_client.get(self._group_url("G1"))
+        assert response.status_code == 200
+        content = response.content.decode()
+        assert "Active Command" in content
+        assert "Inactive Command" in content  # no active filter on pinned view
+        assert "Other" not in content
+        # No filter controls at all on the pinned view.
+        assert "?active=" not in content
+        assert "?group=" not in content
+
+    def test_group_view_multiple_groups(self, admin_client):
+        self._create_commands()
+        RegisteredCommand.objects.create(
+            name="other_cmd", group="G2", display_name="Other", active=True
+        )
+        RegisteredCommand.objects.create(
+            name="third_cmd", group="G3", display_name="Third", active=True
+        )
+        response = admin_client.get(self._group_url("G1+G2"))
+        content = response.content.decode()
+        assert "Active Command" in content
+        assert "Other" in content
+        assert "Third" not in content
+
+    def test_group_view_unknown_group_404(self, admin_client):
+        self._create_commands()
+        response = admin_client.get(self._group_url("Nope"))
+        assert response.status_code == 404
+
     def test_default_filter_shows_active_only(self, admin_client):
         self._create_commands()
         url = reverse("admin:django_admin_runner_registeredcommand_changelist")
@@ -128,17 +165,33 @@ class TestRegisteredCommandAdminChangelist:
         content = response.content.decode()
         assert "Some help text" in content
 
-    def test_history_link_present(self, admin_client):
+    def test_results_link_present_after_run(self, admin_client, superuser):
+        from django_admin_runner.models import CommandExecution
+
         self._create_commands()
+        CommandExecution.objects.create(command_name="active_cmd", triggered_by=superuser)
         url = reverse("admin:django_admin_runner_registeredcommand_changelist")
         response = admin_client.get(url, {"active": "1"})
         assert response.status_code == 200
         content = response.content.decode()
-        history_url = (
+        results_url = (
             reverse("admin:django_admin_runner_commandexecution_changelist")
             + "?command_name=active_cmd"
         )
-        assert history_url in content
+        assert results_url in content
+
+    def test_results_link_disabled_without_runs(self, admin_client):
+        self._create_commands()
+        url = reverse("admin:django_admin_runner_registeredcommand_changelist")
+        response = admin_client.get(url, {"active": "1"})
+        content = response.content.decode()
+        results_url = (
+            reverse("admin:django_admin_runner_commandexecution_changelist")
+            + "?command_name=active_cmd"
+        )
+        # Icon-only disabled placeholder instead of a link.
+        assert results_url not in content
+        assert 'title="No results yet"' in content
 
     def test_search_by_name(self, admin_client):
         self._create_commands()

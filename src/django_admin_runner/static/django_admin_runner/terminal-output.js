@@ -133,6 +133,12 @@
     if (status === "SUCCESS") {
       statusEl.textContent = "Successfully finished";
       statusEl.style.cssText = "color: #28a745; font-weight: 600;";
+    } else if (status === "CANCELLED") {
+      statusEl.textContent = "Cancelled";
+      statusEl.style.cssText = "color: #d97706; font-weight: 600;";
+    } else if (status === "TIMEOUT") {
+      statusEl.textContent = "Timed out";
+      statusEl.style.cssText = "color: #dc2626; font-weight: 600;";
     } else {
       statusEl.textContent = "Failed";
       statusEl.style.cssText = "color: #dc3545; font-weight: 600;";
@@ -178,12 +184,57 @@
       theme: { background: "#1e1e1e" },
     });
     this.term.open(el);
+    // Fit to the container (full-output page, config.fit): the terminal
+    // fills the available width/height instead of the recorded cols/rows.
+    // Re-fit after webfonts load — xterm measures character cells, and the
+    // first measurement can happen before the font is applied.
+    // The vendored addon bundles are UMD builds whose factory returns the
+    // module namespace ({FitAddon: class}) — unwrap that; older builds
+    // assigned the constructor itself to the global.
+    var FitCtor =
+      typeof window.FitAddon === "function"
+        ? window.FitAddon
+        : window.FitAddon && window.FitAddon.FitAddon;
+    if (config.fit && FitCtor) {
+      var self0 = this;
+      var applyFit = function () {
+        if (!self0.fitAddon || !self0.term.element) return;
+        try {
+          self0.fitAddon.fit();
+        } catch (e) {
+          /* noop */
+        }
+      };
+      try {
+        this.fitAddon = new FitCtor();
+        this.term.loadAddon(this.fitAddon);
+        applyFit();
+        // xterm measures character cells; the first measurement can happen
+        // before the webfont is applied — re-fit once fonts are ready.
+        if (document.fonts && document.fonts.ready) {
+          document.fonts.ready.then(function () {
+            applyFit();
+          });
+        }
+        // Late layout / tab panes switching from display:none.
+        if (typeof ResizeObserver !== "undefined") {
+          this.fitObserver = new ResizeObserver(applyFit);
+          this.fitObserver.observe(el);
+        }
+      } catch (e) {
+        this.fitAddon = null;
+      }
+    }
     // WebGL renderer: GPU-accelerated, drastically reduces flicker on
     // rapidly redrawn lines (progress bars). Falls back to the default
     // renderer when WebGL is unavailable or the addon fails to activate.
     try {
-      if (window.WebglAddon) {
-        this.webglAddon = new window.WebglAddon();
+      var WebglCtor =
+        typeof window.WebglAddon === "function"
+          ? window.WebglAddon
+          : window.WebglAddon && window.WebglAddon.WebglAddon;
+      if (WebglCtor) {
+        this.webglAddon = new WebglCtor();
         this.webglAddon.onContextLoss(
           function () {
             if (this.webglAddon) {
@@ -370,14 +421,148 @@
           return self.writeChunked(data.chunk);
         }
         if (data.chunk) {
-          return self.writeChunked(data.chunk);
+          // CRITICAL: advance the cursor AFTER the chunk is written.
+          // Without this, every poll re-requested the same growing delta
+          // and re-wrote it — duplicated lines in the terminal view.
+          return self.writeChunked(data.chunk).then(function () {
+            self.cursor = data.cursor;
+            return data;
+          });
         }
         self.cursor = data.cursor;
         return data;
       });
   };
 
+  /**
+   * Live-update the status badge (#dar-status-badge) from the poll.
+   * Markup mirrors the server-side badge in admin.py (_status_badge) —
+   * keep icons/colors in sync when changing either side.
+   */
+  var BADGE_STYLES = {
+    PENDING: {
+      color: "#6b7280",
+      tint: "rgba(107, 114, 128, 0.14)",
+      icon:
+        '<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">' +
+        '<path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8' +
+        ' 8 8 0 0 1-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/></svg>',
+    },
+    RUNNING: {
+      color: "#2563eb",
+      tint: "rgba(37, 99, 235, 0.14)",
+      icon:
+        '<svg class="dar-spin" width="12" height="12" viewBox="0 0 24 24" ' +
+        'fill="none" stroke="currentColor" stroke-width="3" ' +
+        'stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9"/></svg>',
+    },
+    SUCCESS: {
+      color: "#16a34a",
+      tint: "rgba(22, 163, 74, 0.14)",
+      icon:
+        '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" ' +
+        'stroke="currentColor" stroke-width="3" stroke-linecap="round" ' +
+        'stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
+    },
+    FAILED: {
+      color: "#dc2626",
+      tint: "rgba(220, 38, 38, 0.14)",
+      icon:
+        '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" ' +
+        'stroke="currentColor" stroke-width="3" stroke-linecap="round">' +
+        '<path d="M18 6 6 18M6 6l12 12"/></svg>',
+    },
+    CANCELLED: {
+      color: "#d97706",
+      tint: "rgba(217, 119, 6, 0.14)",
+      icon:
+        '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" ' +
+        'stroke="currentColor" stroke-width="3" stroke-linecap="round">' +
+        '<circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></svg>',
+    },
+    TIMEOUT: {
+      color: "#dc2626",
+      tint: "rgba(220, 38, 38, 0.12)",
+      icon:
+        '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" ' +
+        'stroke="currentColor" stroke-width="3" stroke-linecap="round">' +
+        '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>',
+    },
+  };
+  var BADGE_LABELS = {
+    PENDING: "Pending",
+    RUNNING: "Running",
+    SUCCESS: "Success",
+    FAILED: "Failed",
+    CANCELLED: "Cancelled",
+    TIMEOUT: "Timed out",
+  };
+
+  function updateStatusBadge(status) {
+    var badge = document.getElementById("dar-status-badge");
+    if (!badge || !status || badge.dataset.status === status) return;
+    var style = BADGE_STYLES[status];
+    if (!style) return;
+    badge.dataset.status = status;
+    badge.style.color = style.color;
+    badge.style.background = style.tint;
+    badge.innerHTML = style.icon + (BADGE_LABELS[status] || status);
+  }
+
+  /**
+   * Live Stop / Force Stop control (container `#dar-stop-control`).
+   *
+   * The server renders the control only when the page loads with the
+   * execution already RUNNING — an execution that starts out PENDING gets
+   * its button inserted here when the poll first reports RUNNING (and the
+   * label flips to "Force Stop" once a stop was requested). ``stop`` is
+   * null once the execution leaves RUNNING: the control is removed.
+   */
+  function updateStopControl(stop) {
+    var control = document.getElementById("dar-stop-control");
+    if (!control) return;
+    var state = stop ? (stop.force ? "force" : "stop") : "none";
+    if (control.dataset.stopState === state) return;
+    control.dataset.stopState = state;
+    if (!stop) {
+      control.innerHTML = "";
+      return;
+    }
+    var button = document.createElement("button");
+    button.type = "button";
+    button.textContent = stop.force ? "Force Stop" : "Stop";
+    button.style.cssText =
+      "background:#dc3545;color:#fff;border:0;border-radius:4px;" +
+      "padding:6px 12px;font-size:11px;font-weight:600;cursor:pointer;" +
+      "white-space:nowrap;";
+    button.addEventListener("click", function () {
+      button.disabled = true;
+      var body = new URLSearchParams();
+      if (stop.force) body.set("force", "1");
+      var match = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+      fetch(stop.url, {
+        method: "POST",
+        headers: {
+          "X-CSRFToken": match ? decodeURIComponent(match[1]) : "",
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: body.toString(),
+        credentials: "same-origin",
+      })
+        .then(function () {
+          window.location.reload();
+        })
+        .catch(function () {
+          button.disabled = false;
+        });
+    });
+    control.innerHTML = "";
+    control.appendChild(button);
+  }
+
   function init() {
+    if (window.__darTerminalInit) return; // never double-init
+    window.__darTerminalInit = true;
     var configEl = document.getElementById("dar-terminal-config");
     if (!configEl || !window.Terminal) return;
 
@@ -458,6 +643,8 @@
         if (!running || stopped) return;
         return fetchAll().then(function (results) {
           var data = results && results[0];
+          if (data && data.status) updateStatusBadge(data.status);
+          if (data) updateStopControl(data.stop);
           if (data && data.finished) {
             stopPolling(data.status);
           }
@@ -472,8 +659,19 @@
       if (stopped) return;
       fetchAll()
         .then(function (results) {
-          var data = results && results[0];
-          if (data && data.finished) {
+          var any =
+            results &&
+            results.filter(function (r) {
+              return r;
+            })[0];
+          if (any && any.status) updateStatusBadge(any.status);
+          updateStopControl(any && any.stop);
+          var data =
+            results &&
+            results.filter(function (r) {
+              return r && r.finished;
+            })[0];
+          if (data) {
             stopPolling(data.status);
           }
         })
@@ -486,6 +684,19 @@
           }
         });
     }
+
+    // Re-fit terminals when the window resizes (full-output page only).
+    window.addEventListener("resize", function () {
+      fields.forEach(function (f) {
+        if (f.fitAddon) {
+          try {
+            f.fitAddon.fit();
+          } catch (e) {
+            /* noop */
+          }
+        }
+      });
+    });
   }
 
   if (document.readyState === "loading") {

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import concurrent.futures
 import io
+import threading
 import time
 import traceback
 
@@ -29,6 +30,181 @@ def _terminal_size() -> tuple[int, int]:
     cols = int(getattr(settings, "ADMIN_RUNNER_TERM_COLS", 120))
     rows = int(getattr(settings, "ADMIN_RUNNER_TERM_ROWS", 40))
     return max(20, min(cols, 500)), max(5, min(rows, 200))
+
+
+class WorkerStoppedError(Exception):
+    """Raised inside a command when the worker receives SIGTERM."""
+
+
+class CommandCancelledError(Exception):
+    """Raised inside a command when a stop was requested from the admin.
+
+    Flows the normal cleanup path so the execution finalizes as CANCELLED
+    with its output preserved up to the stop point.
+    """
+
+
+def _stop_requested(execution) -> bool:
+    """Whether a stop was requested for *execution* (fresh DB read)."""
+    from .models import CommandExecution
+
+    return bool(
+        CommandExecution.objects.filter(pk=execution.pk, stop_requested=True).values_list(
+            "pk", flat=True
+        )
+    )
+
+
+def _is_timeout_exception(exc: BaseException) -> bool:
+    """Whether *exc* is a soft time limit (e.g. Celery SoftTimeLimitExceeded).
+
+    Celery is optional, so fall back to a name check when it is absent.
+    """
+    try:
+        from celery.exceptions import SoftTimeLimitExceeded
+
+        return isinstance(exc, SoftTimeLimitExceeded)
+    except ImportError:
+        return type(exc).__name__ == "SoftTimeLimitExceeded"
+
+
+def sweep_stale_executions() -> int:
+    """Finalize RUNNING executions whose worker died without finalizing.
+
+    A hard kill (django-q2 ``timeout``, Celery ``time_limit``, crash, OOM,
+    dead cluster) leaves the row RUNNING: the only writer — the worker —
+    is gone. This sweeper runs lazily from admin request handlers and
+    finalizes such rows:
+
+    - ``worker_pid`` recorded and the process no longer exists (grace
+      period past), or
+    - legacy rows without ``worker_pid`` older than
+      ``ADMIN_RUNNER_STALE_AFTER`` seconds (default 1 h).
+
+    The runner's ``finalize_stale()`` may attribute the cause (backend
+    records → TIMEOUT); otherwise the row becomes FAILED with a
+    "worker lost" note. All updates are conditional on ``status=RUNNING``
+    so a concurrently finishing worker always wins. Never raises.
+    """
+    import errno
+    import logging
+    import os
+    from datetime import timedelta
+
+    from django.utils.timezone import now
+
+    from .models import CommandExecution
+    from .runners import get_runner
+
+    logger = logging.getLogger(__name__)
+    grace = timedelta(seconds=max(10, int(2 * _default_flush_interval())))
+    stale_after = timedelta(
+        seconds=int(getattr(settings, "ADMIN_RUNNER_STALE_AFTER", 3600)),
+    )
+    sweep_from = now()
+
+    runner = None
+    swept = 0
+    try:
+        candidates = CommandExecution.objects.filter(
+            status=CommandExecution.Status.RUNNING,
+            started_at__lt=sweep_from - grace,
+        )
+        for execution in candidates:
+            if execution.worker_pid:
+                try:
+                    os.kill(execution.worker_pid, 0)
+                except OSError as exc:
+                    if exc.errno != errno.ESRCH:
+                        continue  # e.g. EPERM: treat as alive
+                except (ValueError, OverflowError, TypeError):
+                    pass  # bogus pid: treat as dead
+                else:
+                    continue  # alive: never sweep, regardless of age
+            elif execution.started_at and execution.started_at > sweep_from - stale_after:
+                continue  # legacy row (no pid): not old enough yet
+
+            status = CommandExecution.Status.FAILED
+            note = "Worker process no longer exists (worker lost)."
+            try:
+                if runner is None:
+                    runner = get_runner()
+                attributed = runner.finalize_stale(execution)
+                if attributed:
+                    status, note = attributed
+            except Exception:  # noqa: BLE001
+                logger.exception("Stale-sweep attribution failed for execution %s", execution.pk)
+
+            updated = CommandExecution.objects.filter(
+                pk=execution.pk, status=CommandExecution.Status.RUNNING
+            ).update(status=status, finished_at=now())
+            if updated:
+                swept += 1
+                try:
+                    _append_output(execution, "stderr", f"\n{note}\n")
+                except Exception:  # noqa: BLE001
+                    logger.exception(
+                        "Stale-sweep note append failed for execution %s", execution.pk
+                    )
+    except Exception:  # noqa: BLE001
+        logger.exception("Stale-run sweep failed")
+    return swept
+
+
+def _append_output_logged(execution, field: str, chunk: str) -> None:
+    """``_append_output`` wrapper that never raises.
+
+    Runs on the append executor: a failed append must be logged, not kill
+    the command (the exception would surface inside a random ``print()``).
+    """
+    import logging
+
+    try:
+        _append_output(execution, field, chunk)
+    except Exception:  # noqa: BLE001
+        logging.getLogger(__name__).exception(
+            "Failed to append output chunk for execution %s (%s, %d chars)",
+            execution.pk,
+            field,
+            len(chunk),
+        )
+
+
+def _install_sigterm_handler():
+    """Install a SIGTERM handler that raises :class:`WorkerStoppedError`.
+
+    Cluster shutdown (e.g. ``qcluster`` stopping) sends SIGTERM to worker
+    processes; turning it into an exception lets the normal failure path
+    mark the execution FAILED and app-level run guards unblock immediately.
+    Returns ``(signal, previous_handler)`` for restoration, or ``None`` when
+    signal handlers cannot be installed (non-main thread / non-POSIX).
+    """
+    import signal
+
+    def _handler(signum, frame):  # pragma: no cover - exercised via raise
+        raise WorkerStoppedError(
+            "Worker received SIGTERM — the task cluster was stopped while this command was running."
+        )
+
+    try:
+        previous = signal.getsignal(signal.SIGTERM)
+        signal.signal(signal.SIGTERM, _handler)
+        return (signal.SIGTERM, previous)
+    except (ValueError, OSError, AttributeError):
+        return None
+
+
+def _restore_sigterm_handler(installed) -> None:
+    """Restore the previous SIGTERM handler installed by *_install*."""
+    if installed is None:
+        return
+    import signal
+
+    signum, previous = installed
+    try:
+        signal.signal(signum, previous)
+    except (ValueError, OSError):  # pragma: no cover
+        pass
 
 
 def _append_output(execution, field: str, chunk: str) -> None:
@@ -176,6 +352,7 @@ class _LiveTtyStringIO(_TtyStringIO):
         *,
         flush_interval=None,
         flush_bytes=4096,
+        stop_check=None,
     ):
         super().__init__()
         self._execution = execution
@@ -187,52 +364,111 @@ class _LiveTtyStringIO(_TtyStringIO):
         self._last_flush = time.monotonic()
         self._bytes_since_flush = 0
         self._watermark = 0  # chars of the buffer already persisted to parts
+        # Optional cooperative-stop probe (returns True when a stop was
+        # requested for this execution); checked at most once per flush
+        # interval — raising from write() unwinds call_command().
+        self._stop_check = stop_check
+        # Cooperative stop is thread-aware: rich's Live/progress display
+        # writes from a background refresh thread. Raising there cannot
+        # unwind the command (it only kills that thread and spams the
+        # threading excepthook), so the exception is raised in the main
+        # thread only — other threads just latch ``_stop_seen`` so the
+        # main thread raises on its next write without another DB probe.
+        self._main_thread = threading.main_thread()
+        self._stop_seen = False
+        # Serialises read-slice/advance-watermark: output is written from
+        # multiple threads (event loop + executor workers), and two
+        # concurrent flushes would read overlapping slices and append
+        # duplicated chunks.
+        self._flush_lock = threading.Lock()
+        # Futures of appends submitted to _APPEND_EXECUTOR, drained by
+        # final_flush so completion implies persisted output.
+        self._pending_appends: list = []
+
+    def _maybe_stop(self) -> None:
+        """Raise :class:`CommandCancelledError` when a stop was requested.
+
+        Probes the DB at most once per flush interval; the result is
+        latched so subsequent writes (from any thread) skip the probe.
+        Raises only in the main thread (see ``_stop_seen`` init note).
+        """
+        if self._stop_check is None:
+            return
+        if threading.current_thread() is not self._main_thread:
+            # Background writer (e.g. rich's refresh thread): probe and
+            # latch, but never raise here.
+            if not self._stop_seen:
+                self._stop_seen = bool(self._stop_check())
+            return
+        if not self._stop_seen:
+            self._stop_seen = bool(self._stop_check())
+        if self._stop_seen:
+            raise CommandCancelledError("Stop requested.")
 
     def _maybe_flush(self) -> None:
         now_mono = time.monotonic()
-        if (
-            now_mono - self._last_flush >= self._flush_interval
-            or self._bytes_since_flush >= self._flush_bytes
-        ):
+        with self._flush_lock:
+            due = (
+                now_mono - self._last_flush >= self._flush_interval
+                or self._bytes_since_flush >= self._flush_bytes
+            )
+            if due:
+                self._last_flush = now_mono
+                self._bytes_since_flush = 0
+        if due:
+            # Cooperative stop: probed at most once per flush interval.
+            # Raised from write() so it unwinds call_command() through the
+            # normal exception path in execute_command().
+            self._maybe_stop()
             self._flush()
-            self._last_flush = now_mono
-            self._bytes_since_flush = 0
 
     def _flush(self) -> None:
         """Append the not-yet-persisted tail of the buffer to output parts.
 
-        Commands may write output from inside a running asyncio event loop
-        (e.g. async pipelines logging progress). Django's ORM refuses sync
-        calls from async context, so the append is deferred to a thread there.
-        """
-        import asyncio
+        ALL appends go through the single-worker ``_APPEND_EXECUTOR``:
 
-        execution = self._execution
-        field_name = self._field_name
-        chunk = self.getvalue()[self._watermark :]
-        if not chunk:
-            return
-        try:
-            running_loop = asyncio.get_running_loop()
-        except RuntimeError:
-            _append_output(execution, field_name, chunk)
-        else:
-            # Async context — a direct ORM call would raise
-            # SynchronousOnlyOperation. Hand it to the single-worker append
-            # executor: FIFO order is guaranteed (a multi-worker pool could
-            # append concurrent flushes out of order and garble the output).
-            running_loop.run_in_executor(
-                _APPEND_EXECUTOR, _append_output, execution, field_name, chunk
-            )
-        self._watermark += len(chunk)
+        - FIFO ordering is guaranteed for every chunk of this buffer,
+          regardless of which thread (event loop, executor worker, main)
+          triggered the flush — mixing direct sync appends with deferred
+          ones would persist chunks out of order.
+        - In async context a direct ORM call would additionally raise
+          ``SynchronousOnlyOperation``.
+        - Errors are logged in the worker instead of killing the command
+          (a failed append must not turn a ``print()`` into a crash).
+        """
+        with self._flush_lock:
+            chunk = self.getvalue()[self._watermark :]
+            if not chunk:
+                return
+            # Advance under the lock so a concurrent flush cannot read the
+            # same slice (and duplicate it).
+            self._watermark += len(chunk)
+        future = _APPEND_EXECUTOR.submit(
+            _append_output_logged, self._execution, self._field_name, chunk
+        )
+        with self._flush_lock:
+            self._pending_appends.append(future)
+            # Drop completed futures so the list cannot grow unboundedly.
+            self._pending_appends = [f for f in self._pending_appends if not f.done()]
 
     def final_flush(self) -> None:
-        """Persist all remaining output (used at command completion)."""
+        """Persist all remaining output (used at command completion).
+
+        Submits any unflushed tail and blocks until every pending append has
+        been written, so a subsequent read (or the failure path's
+        ``_clear_output``) can never race a stale chunk.
+        """
         self._flush()
+        with self._flush_lock:
+            pending = list(self._pending_appends)
+            self._pending_appends = []
+        if pending:
+            concurrent.futures.wait(pending)
 
     def write(self, s: str, /) -> int:
         n = super().write(s)
-        self._bytes_since_flush += n
+        with self._flush_lock:
+            self._bytes_since_flush += n
         self._maybe_flush()
         return n
 
@@ -346,6 +582,46 @@ def _revert_debugsqlshell_monkeypatch() -> None:
         pass
 
 
+def run_scheduled_command(command_name: str, kwargs: dict, schedule_pk: int | None = None) -> None:
+    """Schedule-safe entry point: create the execution at run time, then run.
+
+    Unlike the run-now flow (which creates the ``CommandExecution`` row in
+    the admin before enqueueing), a future run cannot know the execution
+    pk ahead of time — so this function creates the row when the backend
+    fires the schedule, links it to the originating schedule for
+    traceability, and delegates to :func:`execute_command`.
+
+    Fired clocked (one-off) schedules are disabled afterwards: django-q2
+    deletes its native one-off schedule after the run, so the library row
+    is kept but marked disabled (audit trail).
+    """
+    from .models import CommandExecution, ScheduledCommand
+
+    schedule = (
+        ScheduledCommand.objects.filter(pk=schedule_pk).first() if schedule_pk is not None else None
+    )
+    from .runners import get_runner
+
+    execution = CommandExecution.objects.create(
+        command_name=command_name,
+        kwargs=kwargs or {},
+        schedule=schedule,
+        # The execution row is created inside the backend's task, so its
+        # backend is the active runner's; the label carries the schedule's
+        # for traceability in the results list.
+        backend=get_runner().backend,
+        label=str(schedule.label or "") if schedule is not None else "",
+    )
+    try:
+        execute_command(command_name, kwargs or {}, execution.pk)
+    finally:
+        if schedule is not None and schedule.kind == ScheduledCommand.Kind.CLOCKED:
+            ScheduledCommand.objects.filter(pk=schedule.pk).update(
+                enabled=False,
+                backend_schedule_key="",
+            )
+
+
 def execute_command(command_name: str, kwargs: dict, execution_pk: int) -> None:
     """Run *command_name* and update the ``CommandExecution`` record.
 
@@ -366,10 +642,28 @@ def execute_command(command_name: str, kwargs: dict, execution_pk: int) -> None:
     # autodiscovery skip list was in effect).
     _revert_debugsqlshell_monkeypatch()
 
+    import os
+
+    # Idempotency guard: claim the execution by transitioning PENDING →
+    # RUNNING with this process's PID. A duplicate attempt (e.g. a backend
+    # retry after a force-killed worker re-delivers the task) finds the row
+    # in a non-PENDING state and exits without touching it.
+    updated = CommandExecution.objects.filter(
+        pk=execution_pk, status=CommandExecution.Status.PENDING
+    ).update(
+        status=CommandExecution.Status.RUNNING,
+        started_at=now(),
+        worker_pid=os.getpid(),
+    )
+    if not updated:
+        return
     execution = CommandExecution.objects.get(pk=execution_pk)
-    execution.status = CommandExecution.Status.RUNNING
-    execution.started_at = now()
-    execution.save(update_fields=["status", "started_at"])
+
+    # Fail gracefully when the worker is asked to stop (qcluster shutdown
+    # sends SIGTERM to its workers). Without this, a stopped cluster leaves
+    # the execution (and any app-level run guards) stuck in a running state
+    # until a stale-run sweep notices.
+    _sigterm_handler = _install_sigterm_handler()
 
     ctx = HookContext()
     hooks = get_hooks()
@@ -378,6 +672,7 @@ def execute_command(command_name: str, kwargs: dict, execution_pk: int) -> None:
     exec_ctx = _set_execution_context()
 
     command_exc: Exception | None = None
+    cancelled = False
     traceback_text = ""
 
     try:
@@ -396,11 +691,13 @@ def execute_command(command_name: str, kwargs: dict, execution_pk: int) -> None:
             execution,
             "stdout",
             flush_interval=_flush_interval_for_command(command_name),
+            stop_check=lambda: _stop_requested(execution),
         )
         stderr_buf = _LiveTtyStringIO(
             execution,
             "stderr",
             flush_interval=_flush_interval_for_command(command_name),
+            stop_check=lambda: _stop_requested(execution),
         )
         try:
             # _hidden_aware_argparse strips custom kwargs (widget=, hidden=)
@@ -444,20 +741,60 @@ def execute_command(command_name: str, kwargs: dict, execution_pk: int) -> None:
                         os.environ[key] = old_value
                 sys.stdout, sys.stderr = old_stdout, old_stderr
             execution.status = CommandExecution.Status.SUCCESS
+        except CommandCancelledError:
+            # Cooperative stop (heartbeat) or stop-flagged SIGTERM: the
+            # command unwound cleanly — finalize as CANCELLED with output
+            # preserved (a cancellation note is appended below).
+            execution.status = CommandExecution.Status.CANCELLED
+            cancelled = True
         except Exception as exc:
-            execution.status = CommandExecution.Status.FAILED
-            traceback_text = _rich_traceback() or traceback.format_exc()
-            command_exc = exc
+            if isinstance(exc, WorkerStoppedError) and _stop_requested(execution):
+                # A SIGTERM received because a stop was requested counts as
+                # cancellation (the heartbeat probe missed it).
+                execution.status = CommandExecution.Status.CANCELLED
+                cancelled = True
+            elif _is_timeout_exception(exc) and _stop_requested(execution):
+                # A stop was requested before the limit hit: the user's
+                # intent wins over the timeout classification.
+                execution.status = CommandExecution.Status.CANCELLED
+                cancelled = True
+            elif _is_timeout_exception(exc):
+                # Soft time limit (Celery): the limit is the cause, not a
+                # command error — finalize as TIMEOUT with the traceback.
+                execution.status = CommandExecution.Status.TIMEOUT
+                traceback_text = _rich_traceback() or traceback.format_exc()
+                command_exc = exc
+            else:
+                execution.status = CommandExecution.Status.FAILED
+                traceback_text = _rich_traceback() or traceback.format_exc()
+                command_exc = exc
         finally:
             stdout_buf.final_flush()
-            if command_exc is not None:
+            if cancelled:
+                # Append a cancellation note after the preserved output.
+                stderr_buf.final_flush()
+                cancel_note = (
+                    f"\nCommand cancelled (stop requested from admin)"
+                    f" at {now():%Y-%m-%d %H:%M:%S %Z}.\n"
+                )
+                _append_output(execution, "stderr", cancel_note)
+            elif command_exc is not None:
+                # Drain stderr appends BEFORE clearing: a deferred chunk
+                # still in the executor queue would otherwise land after the
+                # clear and resurrect pre-failure output after the traceback.
+                stderr_buf.final_flush()
                 # On failure the traceback replaces any captured stderr
                 # (matches the legacy field behaviour).
                 _clear_output(execution, "stderr")
-                _append_output(execution, "stderr", traceback_text)
+                _append_output(
+                    execution,
+                    "stderr",
+                    str(command_exc) + "\n" + traceback_text,
+                )
             else:
                 stderr_buf.final_flush()
             execution.finished_at = now()
+            _restore_sigterm_handler(_sigterm_handler)
 
         # Pre-save hooks (forward order)
         for hook in hooks:
@@ -475,8 +812,16 @@ def execute_command(command_name: str, kwargs: dict, execution_pk: int) -> None:
         if result_html is not None:
             execution.result_html = str(result_html)
 
-        # Save execution record
-        execution.save(update_fields=["status", "result_html", "finished_at"])
+        # Save execution record — conditionally on still being RUNNING so a
+        # stop/force-kill racing completion never overwrites the other
+        # side's terminal state.
+        CommandExecution.objects.filter(
+            pk=execution.pk, status=CommandExecution.Status.RUNNING
+        ).update(
+            status=execution.status,
+            result_html=execution.result_html,
+            finished_at=execution.finished_at,
+        )
 
         # Post-save hooks (reversed order, non-fatal)
         for hook in reversed(hooks):
@@ -492,7 +837,8 @@ def execute_command(command_name: str, kwargs: dict, execution_pk: int) -> None:
         # Re-raise so the task backend (Celery, django-q2, …) also marks the
         # task as failed.  We do this *after* saving the execution record so
         # the admin always has the failure details even if the backend doesn't
-        # store them.
+        # store them.  Cancellations are not re-raised: the task backend
+        # would flag the task failed (or retry it) for an intended stop.
         if command_exc is not None:
             raise command_exc
     finally:
