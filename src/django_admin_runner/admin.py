@@ -228,6 +228,10 @@ _RUN_ICON = (
     '<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">'
     '<path d="M8 5.14v13.72L19 12z"/></svg>'
 )
+_STOP_ICON = (
+    '<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">'
+    '<rect x="6" y="6" width="12" height="12" rx="2"/></svg>'
+)
 _RESULTS_ICON = (
     '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" '
     'stroke="currentColor" stroke-width="2.5" stroke-linecap="round" '
@@ -255,6 +259,7 @@ _PRIMARY = "var(--primary-600, var(--button-bg, #5b6ee1))"
 #: that may not exist, and no Tailwind arbitrary-value classes — those are
 #: JIT-generated and absent from Unfold's shipped stylesheet).
 _BTN_BORDER = "2px solid rgba(128, 128, 128, 0.45)"
+_BTN_DANGER_BORDER = "2px solid rgba(220, 53, 69, 0.55)"
 
 
 def _status_icon(status: str) -> SafeString:
@@ -272,6 +277,8 @@ def _action_button(
     title: str,
     style: str = "ghost",
     disabled: bool = False,
+    extra_class: str = "",
+    data_attrs: str = "",
 ) -> str:
     """One changelist action button (theme-agnostic inline styles).
 
@@ -286,7 +293,15 @@ def _action_button(
     label but render as a faded, non-clickable ``<span>``.
     """
     icon_html = f'<span style="color:{_PRIMARY};">{icon}</span>' if style == "tinted" else icon
-    border_css = "" if style == "soft" else f"border:{_BTN_BORDER};"
+    if style == "danger":
+        icon_html = f'<span style="color:#dc3545;">{icon}</span>'
+    elif style == "force":
+        icon_html = f'<span style="color:#fff;">{icon}</span>'
+    border_css = (
+        ""
+        if style == "soft"
+        else f"border:{_BTN_DANGER_BORDER if style in ('danger', 'force') else _BTN_BORDER};"
+    )
     # Icon-only buttons (Run, Schedules) stay compact; the soft text
     # button (Results) is framed by its text and needs less padding.
     padding = "4px 7px" if not label else "4px 6px"
@@ -297,6 +312,12 @@ def _action_button(
     )
     if style == "tinted":
         base_css += f"background:color-mix(in srgb, {_PRIMARY} 10%, transparent);"
+    elif style == "danger":
+        base_css += "background:rgba(220, 53, 69, 0.08);"
+    elif style == "force":
+        # Filled red — unmistakably the last resort, one step up from the
+        # outlined danger style.
+        base_css += "background:#dc3545;color:#fff;"
 
     if disabled:
         css = base_css + "opacity:.4;cursor:not-allowed;"
@@ -306,7 +327,11 @@ def _action_button(
             f'aria-disabled="true">{inner}</span>'
         )
     inner = f"{icon_html}{label}"
-    return f'<a class="dar-cmdbtn" href="{url}" title="{title}" style="{base_css}">{inner}</a>'
+    css_class = f"dar-cmdbtn {extra_class}".strip()
+    return (
+        f'<a class="{css_class}" href="{url}" title="{title}" '
+        f'style="{base_css}"{data_attrs}>{inner}</a>'
+    )
 
 
 class CommandGroupListFilter(admin.SimpleListFilter):
@@ -579,11 +604,10 @@ class CommandExecutionAdmin(_ModelAdminBase):  # type: ignore[misc]
         )
 
     list_display = [
-        "command_name",
-        "label_display",
+        "command_cell",
         "status_display",
         "triggered_by_display",
-        "backend",
+        "backend_cell",
         "created_at",
         "result_button",
     ]
@@ -641,13 +665,40 @@ class CommandExecutionAdmin(_ModelAdminBase):  # type: ignore[misc]
     ]
     ordering = ["-created_at"]
 
-    @admin.display(description="Label", ordering="label")
-    def label_display(self, obj: CommandExecution) -> str:
-        """Run label: manual label or the originating schedule's label."""
+    @admin.display(description="Name", ordering="command_name")
+    def command_cell(self, obj: CommandExecution) -> SafeString:
+        """Command name + label beneath. Registry display names are plain;
+        raw command names (unregistered commands) render as code."""
+        display_name = getattr(obj, "cmd_display_name", None)
+        if display_name:
+            name_html = f"<strong>{display_name}</strong>"
+        else:
+            name_html = (
+                f'<code style="font-size:12px;background:rgba(128,128,128,0.12);'
+                f'padding:1px 5px;border-radius:4px;">{obj.command_name}</code>'
+            )
         label = str(obj.label or "")
         if not label and obj.schedule_id and obj.schedule:
             label = str(obj.schedule.label)
-        return label or "—"
+        label_html = (
+            f'<br><span style="color:var(--body-quiet-color,#888);font-size:11.5px;">{label}</span>'
+            if label
+            else ""
+        )
+        return cast(SafeString, mark_safe(f"{name_html}{label_html}"))
+
+    @admin.display(description="Backend", ordering="backend")
+    def backend_cell(self, obj: CommandExecution) -> SafeString:
+        """Backend (small) + the real command name (code) beneath."""
+        backend = str(obj.backend or "—")
+        backend_html = (
+            f'<span style="color:var(--body-quiet-color,#888);font-size:11.5px;">{backend}</span>'
+        )
+        name_html = (
+            f'<br><code style="font-size:11.5px;background:rgba(128,128,128,0.12);'
+            f'padding:1px 5px;border-radius:4px;">{obj.command_name}</code>'
+        )
+        return cast(SafeString, mark_safe(f"{backend_html}{name_html}"))
 
     @admin.display(description="Schedule")
     def schedule_display(self, obj: CommandExecution) -> SafeString | str:
@@ -747,20 +798,127 @@ class CommandExecutionAdmin(_ModelAdminBase):  # type: ignore[misc]
         )
         return cast(SafeString, mark_safe(html))
 
-    @admin.display(description="", ordering="created_at")
+    # Row-action icons for the results changelist.
+    _VIEW_ICON = (
+        '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" '
+        'stroke="currentColor" stroke-width="2.5" stroke-linecap="round" '
+        'stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7'
+        '-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>'
+    )
+    _STDOUT_ICON = (
+        '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" '
+        'stroke="currentColor" stroke-width="2.5" stroke-linecap="round" '
+        'stroke-linejoin="round"><path d="M4 17l6-5-6-5M12 19h8"/></svg>'
+    )
+    _STDERR_ICON = (
+        '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" '
+        'stroke="currentColor" stroke-width="2.5" stroke-linecap="round" '
+        'stroke-linejoin="round"><path d="M12 9v4M12 17h.01"/><path '
+        'd="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 '
+        '3.9a2 2 0 0 0-3.4 0z"/></svg>'
+    )
+    _SETTINGS_ICON = (
+        '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" '
+        'stroke="currentColor" stroke-width="2.5" stroke-linecap="round" '
+        'stroke-linejoin="round"><circle cx="12" cy="12" r="3"/>'
+        '<path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 '
+        "1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 "
+        "0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 "
+        "1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 "
+        "1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09"
+        "a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 "
+        "0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 "
+        "0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 "
+        "1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 "
+        "1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 "
+        '4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>'
+    )
+
+    @admin.display(description="Actions", ordering="created_at")
     def result_button(self, obj: CommandExecution) -> SafeString:
-        buttons: list[str] = []
+        """Row actions. First slot depends on state: Stop/Force Stop while
+        running (replacing Rerun — you rarely want to re-launch something
+        that is still running), Rerun otherwise. Then View/Output/Errors
+        and, for scheduled runs, the schedule settings gear."""
+        parts: list[str] = []
+
+        # --- first slot: stop (running) or rerun (finished) ---
+        request = getattr(self, "_list_request", None)
+        entry = _registry.get(str(obj.command_name))
+        if obj.status == CommandExecution.Status.RUNNING:
+            # Stop (graceful) / Force Stop (after a stop was requested and
+            # the backend supports hard kills). Mirrors the execution page.
+            if request is not None and self.has_stop_permission(request):
+                force = obj.stop_requested
+                if not force or get_runner().supports_force_stop:
+                    parts.append(
+                        _action_button(
+                            icon=_STOP_ICON,
+                            url=self._stop_url(obj),
+                            title=("Force stop (kill the worker)" if force else "Stop (graceful)"),
+                            # Outlined red for the graceful stop, filled red
+                            # once it escalates to a hard kill.
+                            style="force" if force else "danger",
+                            # The stop endpoint is POST-only; the changelist
+                            # wraps rows in a form (no nested forms), so a
+                            # delegated JS handler in terminal-output.js
+                            # turns this link into the POST.
+                            extra_class="dar-stop-post",
+                            data_attrs=f'data-force="{1 if force else 0}"',
+                        )
+                    )
+        elif entry is not None and request is not None and has_permission(request.user, entry):
+            run_url = reverse("admin:django_admin_runner_command_run", args=[obj.command_name])
+            parts.append(
+                _action_button(
+                    icon=_RUN_ICON,
+                    url=f"{run_url}?rerun={obj.pk}",
+                    title="Rerun with the same parameters",
+                    style="tinted",
+                )
+            )
+        else:
+            parts.append(
+                _action_button(
+                    icon=_RUN_ICON,
+                    disabled=True,
+                    title=(
+                        "No permission to run this command"
+                        if entry is not None
+                        else "Command is no longer registered"
+                    ),
+                    style="tinted",
+                )
+            )
+
+        # Scheduled runs: gear icon linking to the schedule's settings.
+        if obj.schedule_id:
+            settings_url = reverse(
+                "admin:django_admin_runner_scheduledcommand_change",
+                args=[obj.schedule_id],
+            )
+            title = "Schedule settings"
+            if obj.schedule:
+                title = f"Schedule settings: {obj.schedule.label or obj.schedule.command_name}"
+            parts.append(
+                _action_button(
+                    icon=self._SETTINGS_ICON,
+                    url=settings_url,
+                    title=title,
+                )
+            )
+
         if obj.result_html:
             url = reverse(
                 "admin:django_admin_runner_commandexecution_result",
                 args=[obj.pk],
             )
-            buttons.append(
-                f'<a href="{url}" '
-                f'style="display:inline-block;padding:4px 10px;border-radius:4px;'
-                f"font-size:11px;font-weight:600;color:#fff;"
-                f'background:#28a745;text-decoration:none;margin-right:4px;"'
-                f">View</a>"
+            parts.append(
+                _action_button(
+                    icon=self._VIEW_ICON,
+                    url=url,
+                    title="Result view",
+                )
             )
         if getattr(obj, "has_stdout", False) or obj.has_output("stdout"):
             url = (
@@ -770,12 +928,12 @@ class CommandExecutionAdmin(_ModelAdminBase):  # type: ignore[misc]
                 )
                 + "#stdout"
             )
-            buttons.append(
-                f'<a href="{url}" '
-                f'style="display:inline-block;padding:4px 10px;border-radius:4px;'
-                f"font-size:11px;font-weight:600;color:#fff;"
-                f'background:#0d6efd;text-decoration:none;margin-right:4px;"'
-                f">Stdout</a>"
+            parts.append(
+                _action_button(
+                    icon=self._STDOUT_ICON,
+                    url=url,
+                    title="Output (stdout)",
+                )
             )
         if getattr(obj, "has_stderr", False) or obj.has_output("stderr"):
             url = (
@@ -785,22 +943,25 @@ class CommandExecutionAdmin(_ModelAdminBase):  # type: ignore[misc]
                 )
                 + "#stderr"
             )
-            buttons.append(
-                f'<a href="{url}" '
-                f'style="display:inline-block;padding:4px 10px;border-radius:4px;'
-                f"font-size:11px;font-weight:600;color:#fff;"
-                f'background:#dc3545;text-decoration:none;margin-right:4px;"'
-                f">Stderr</a>"
+            parts.append(
+                _action_button(
+                    icon=f'<span style="color:#dc3545;">{self._STDERR_ICON}</span>',
+                    url=url,
+                    title="Errors (stderr)",
+                )
             )
-        if not buttons:
-            return cast(SafeString, mark_safe("<span>—</span>"))
-        return cast(SafeString, mark_safe("".join(buttons)))
+        html = (
+            f'<span style="display:inline-flex;align-items:center;gap:7px;">{"".join(parts)}</span>'
+        )
+        return cast(SafeString, mark_safe(html))
 
     def has_add_permission(self, request):
         return False
 
     def get_queryset(self, request):
-        from django.db.models import Exists, OuterRef
+        from django.db.models import Exists, OuterRef, Subquery
+
+        from .models import RegisteredCommand
 
         qs = (
             super()
@@ -812,8 +973,17 @@ class CommandExecutionAdmin(_ModelAdminBase):  # type: ignore[misc]
                 has_stderr=Exists(
                     CommandOutputPart.objects.filter(execution=OuterRef("pk"), field="stderr")
                 ),
+                # Registry display name (falls back to the raw command_name
+                # for unregistered commands) — same name the commands view
+                # shows, so all views agree.
+                cmd_display_name=Subquery(
+                    RegisteredCommand.objects.filter(name=OuterRef("command_name")).values(
+                        "display_name"
+                    )[:1]
+                ),
             )
         )
+        self._list_request = request  # for per-row permission checks
         if request.user.has_perm("django_admin_runner.view_all_executions"):
             return qs
         return qs.filter(triggered_by=request.user)
@@ -1323,18 +1493,32 @@ class CommandExecutionAdmin(_ModelAdminBase):  # type: ignore[misc]
         command_name: str,
         form_class: type[forms.Form],
     ) -> dict:
-        """Initial form data from ``?rerun=<pk>`` (empty when unavailable).
+        """Initial form data from ``?rerun=<pk>`` or ``?schedule=<pk>``.
 
-        The referenced execution is looked up through the permission-
-        restricted queryset and must belong to the same command.
+        ``rerun`` references a past execution (looked up through the
+        permission-restricted queryset, same command required); ``schedule``
+        references a ScheduledCommand whose stored kwargs prefill the form
+        for a one-off run of that schedule.
         """
         rerun_pk = request.GET.get("rerun", "")
-        if not rerun_pk:
-            return {}
-        execution = self.get_queryset(request).filter(pk=rerun_pk).first()
-        if execution is None or execution.command_name != command_name:
-            return {}
-        return self._initial_from_kwargs(form_class, execution.kwargs or {})
+        if rerun_pk:
+            execution = self.get_queryset(request).filter(pk=rerun_pk).first()
+            if execution is None or execution.command_name != command_name:
+                return {}
+            return self._initial_from_kwargs(form_class, execution.kwargs or {})
+
+        schedule_pk = request.GET.get("schedule", "")
+        if schedule_pk:
+            from .models import ScheduledCommand
+
+            schedule = ScheduledCommand.objects.filter(
+                pk=schedule_pk, command_name=command_name
+            ).first()
+            if schedule is None:
+                return {}
+            return self._initial_from_kwargs(form_class, schedule.kwargs or {})
+
+        return {}
 
     def _command_run_view(self, request, command_name: str):
         if command_name not in _registry:
@@ -1565,13 +1749,13 @@ class ScheduledCommandAdmin(_ModelAdminBase):  # type: ignore[misc]
     change_form_template = "admin/django_admin_runner/scheduledcommand/change_form.html"
 
     list_display = [
-        "label",
-        "command_name",
+        "schedule_cell",
         "kind",
         "schedule_summary_display",
         "enabled_display",
         "next_run",
         "last_run_display",
+        "buttons",
     ]
     list_filter = [ScheduleCommandListFilter, "enabled", "source"]
     search_fields = ["label", "command_name"]
@@ -1585,8 +1769,9 @@ class ScheduledCommandAdmin(_ModelAdminBase):  # type: ignore[misc]
     def get_queryset(self, request):
         from django.db.models import OuterRef, Subquery
 
-        from .models import CommandExecution
+        from .models import CommandExecution, RegisteredCommand
 
+        self._list_request = request  # for the per-row Run permission check
         last_execution = CommandExecution.objects.filter(schedule_id=OuterRef("pk")).order_by(
             "-created_at"
         )
@@ -1596,8 +1781,63 @@ class ScheduledCommandAdmin(_ModelAdminBase):  # type: ignore[misc]
             .annotate(
                 last_status=Subquery(last_execution.values("status")[:1]),
                 last_run_at=Subquery(last_execution.values("created_at")[:1]),
+                # Registry display name (fallback: raw command_name), so
+                # the schedules view shows the same name as the commands
+                # and results views.
+                cmd_display_name=Subquery(
+                    RegisteredCommand.objects.filter(name=OuterRef("command_name")).values(
+                        "display_name"
+                    )[:1]
+                ),
             )
         )
+
+    @admin.display(description="Name", ordering="command_name")
+    def schedule_cell(self, obj: ScheduledCommand) -> SafeString:
+        """Command name first, label beneath. Registry display names are
+        plain; raw command names render as code."""
+        display_name = getattr(obj, "cmd_display_name", None)
+        if display_name:
+            name_html = f"<strong>{display_name}</strong>"
+        else:
+            name_html = (
+                f'<code style="font-size:12px;background:rgba(128,128,128,0.12);'
+                f'padding:1px 5px;border-radius:4px;">{obj.command_name}</code>'
+            )
+        label_html = ""
+        if obj.label:
+            label_html = (
+                f'<br><span style="color:var(--body-quiet-color,#888);'
+                f'font-size:11.5px;">{obj.label}</span>'
+            )
+        return cast(SafeString, mark_safe(f"{name_html}{label_html}"))
+
+    @admin.display(description="Actions")
+    def buttons(self, obj: ScheduledCommand) -> SafeString:
+        """Run once: opens the run view prefilled from the schedule's
+        stored parameters (same tinted play button as everywhere else)."""
+        entry = _registry.get(str(obj.command_name))
+        request = getattr(self, "_list_request", None)
+        if entry is not None and request is not None and has_permission(request.user, entry):
+            run_url = reverse("admin:django_admin_runner_command_run", args=[obj.command_name])
+            button = _action_button(
+                icon=_RUN_ICON,
+                url=f"{run_url}?schedule={obj.pk}",
+                title="Run once with the schedule's parameters",
+                style="tinted",
+            )
+        else:
+            button = _action_button(
+                icon=_RUN_ICON,
+                disabled=True,
+                title=(
+                    "No permission to run this command"
+                    if entry is not None
+                    else "Command is no longer registered"
+                ),
+                style="tinted",
+            )
+        return cast(SafeString, mark_safe(button))
 
     # ------------------------------------------------------------------
     # Combined parameter + schedule form

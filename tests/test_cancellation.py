@@ -422,3 +422,39 @@ class TestCancelledStatusDisplay:
 
         ex = _make_execution(superuser, status=CommandExecution.Status.CANCELLED)
         assert "CANCELLED" in _status_badge(ex)
+
+
+@pytest.mark.django_db
+class TestResultsRowStopButton:
+    """Stop / Force Stop in the results changelist Actions column."""
+
+    def _list(self, admin_client, superuser, **kwargs):
+        ex = _make_execution(superuser, **kwargs)
+        url = reverse("admin:django_admin_runner_commandexecution_changelist")
+        body = admin_client.get(url).content.decode()
+        return ex, body
+
+    def _stop_url(self, ex):
+        return reverse("admin:django_admin_runner_commandexecution_stop", args=[ex.pk])
+
+    def test_stop_button_while_running(self, admin_client, superuser):
+        ex, body = self._list(admin_client, superuser, status=CommandExecution.Status.RUNNING)
+        assert f'href="{self._stop_url(ex)}"' in body
+        # Stop replaces the rerun button while running.
+        run_url = reverse("admin:django_admin_runner_command_run", args=[ex.command_name])
+        assert f"{run_url}?rerun={ex.pk}" not in body
+
+    def test_no_stop_button_when_stop_requested_unsupported(self, admin_client, superuser):
+        # django-tasks default backend: no force support → after a stop
+        # request the row shows no stop control at all.
+        ex, body = self._list(
+            admin_client,
+            superuser,
+            status=CommandExecution.Status.RUNNING,
+            stop_requested=True,
+        )
+        assert f'href="{self._stop_url(ex)}"' not in body
+
+    def test_no_stop_button_when_not_running(self, admin_client, superuser):
+        ex, body = self._list(admin_client, superuser, status=CommandExecution.Status.SUCCESS)
+        assert f'href="{self._stop_url(ex)}"' not in body

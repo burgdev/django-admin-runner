@@ -531,10 +531,20 @@
     var button = document.createElement("button");
     button.type = "button";
     button.textContent = stop.force ? "Force Stop" : "Stop";
-    button.style.cssText =
-      "background:#dc3545;color:#fff;border:0;border-radius:4px;" +
-      "padding:6px 12px;font-size:11px;font-weight:600;cursor:pointer;" +
-      "white-space:nowrap;";
+    if (stop.force) {
+      // Filled red — unmistakably the last resort.
+      button.style.cssText =
+        "background:#dc3545;color:#fff;border:0;" +
+        "border-radius:4px;padding:6px 12px;font-size:11px;font-weight:600;" +
+        "cursor:pointer;white-space:nowrap;";
+    } else {
+      // Outlined red for the graceful stop.
+      button.style.cssText =
+        "background:rgba(220,53,69,0.08);color:#dc3545;" +
+        "border:2px solid rgba(220,53,69,0.55);border-radius:4px;" +
+        "padding:6px 12px;font-size:11px;font-weight:600;" +
+        "cursor:pointer;white-space:nowrap;";
+    }
     button.addEventListener("click", function () {
       button.disabled = true;
       var body = new URLSearchParams();
@@ -698,6 +708,36 @@
       });
     });
   }
+
+  // Changelist Stop / Force Stop links: the stop endpoint is POST-only
+  // and the changelist wraps rows in a form (no nested forms allowed),
+  // so the link is turned into a fetch POST here. Registered at module
+  // scope — pages without terminals (the changelist) skip init() early.
+  document.addEventListener("click", function (ev) {
+    var link = ev.target.closest ? ev.target.closest("a.dar-stop-post") : null;
+    if (!link) return;
+    ev.preventDefault();
+    if (link.dataset.stopPosted) return;
+    link.dataset.stopPosted = "1";
+    var body = new URLSearchParams();
+    if (link.dataset.force === "1") body.set("force", "1");
+    var match = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+    fetch(link.href, {
+      method: "POST",
+      headers: {
+        "X-CSRFToken": match ? decodeURIComponent(match[1]) : "",
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: body.toString(),
+      credentials: "same-origin",
+    })
+      .then(function () {
+        window.location.reload();
+      })
+      .catch(function () {
+        delete link.dataset.stopPosted;
+      });
+  });
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", init);
