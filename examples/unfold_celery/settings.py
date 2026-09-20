@@ -73,6 +73,11 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", "redis://localhost:6379/0")
 CELERY_RESULT_BACKEND = "django-db"
 CELERY_RESULT_EXTENDED = True
+# Scheduling note: the library materializes schedules into django-q2's
+# native scheduler only — this example's django_celery_beat entries are
+# plain Celery beat schedules, not library schedules. Beat never replays
+# missed slots after downtime (no catch-up concept, unlike django-q2),
+# and a worker-downtime broker backlog simply drains in order.
 
 ADMIN_RUNNER_BACKEND = "celery"
 ADMIN_RUNNER_UPLOAD_PATH = os.path.join(BASE_DIR, "uploads")

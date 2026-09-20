@@ -13,7 +13,7 @@ class AdminRunnerConfig(AppConfig):
 
         autodiscover_commands()
 
-        from .sync import sync_registered_commands
+        from .sync import sync_declarative_schedules, sync_registered_commands
 
         with warnings.catch_warnings():
             warnings.filterwarnings(
@@ -21,5 +21,6 @@ class AdminRunnerConfig(AppConfig):
             )
             try:
                 sync_registered_commands()
+                sync_declarative_schedules()
             except Exception:
                 pass

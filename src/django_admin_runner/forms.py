@@ -174,6 +174,12 @@ def _apply_unfold_widget(field: forms.Field) -> None:
         field.widget.template_name = "django_admin_runner/widgets/file_or_path_unfold.html"
     elif isinstance(field, forms.BooleanField):
         field.widget = UnfoldBooleanWidget()
+    elif isinstance(field, forms.MultipleChoiceField):
+        from unfold.widgets import UnfoldAdminSelectMultipleWidget
+
+        field.widget = UnfoldAdminSelectMultipleWidget()
+        # Re-sync choices (see ChoiceField branch above).
+        field.choices = field.choices  # type: ignore[assignment]
     elif isinstance(field, forms.ChoiceField):
         field.widget = UnfoldAdminSelectWidget()
         # Re-sync choices from field to widget: replacing the widget above
@@ -304,6 +310,35 @@ class _TypedCharField(forms.CharField):
             raise ValidationError(str(exc) or "Enter a valid value.", code="invalid") from exc
 
 
+def validate_command_kwargs(command_name: str, kwargs: dict) -> None:
+    """Validate stored *kwargs* against the command's current argparse form.
+
+    Rejects options the command no longer defines (stale schedules) and
+    missing required arguments.  Raises ``ValidationError`` with an
+    actionable message; returns silently when the kwargs are compatible.
+    """
+    FormClass = form_from_command(command_name)
+    fields: dict[str, forms.Field] = getattr(FormClass, "base_fields", {})
+    unknown = [key for key in kwargs if key not in fields]
+    if unknown:
+        raise ValidationError(
+            f"Unknown parameter(s) no longer provided by command '{command_name}': "
+            f"{', '.join(sorted(unknown))}.",
+            code="unknown",
+        )
+    missing = [
+        name
+        for name, field in fields.items()
+        if field.required and name not in kwargs and field.initial is None
+    ]
+    if missing:
+        raise ValidationError(
+            f"Missing required parameter(s) for command '{command_name}': "
+            f"{', '.join(sorted(missing))}.",
+            code="missing",
+        )
+
+
 def _action_to_field(action: argparse.Action) -> forms.Field | None:
     """Map an argparse *action* to the appropriate Django form field.
 
@@ -330,9 +365,29 @@ def _action_to_field(action: argparse.Action) -> forms.Field | None:
     if isinstance(action, argparse._StoreTrueAction | argparse._StoreFalseAction):  # noqa: SLF001
         return forms.BooleanField(required=False, help_text=help_text)
 
+    is_multi = isinstance(
+        action,
+        argparse._AppendAction | argparse._AppendConstAction,  # noqa: SLF001
+    ) or action.nargs in ("*", "+")
+
     if action.choices:
-        choices = [(str(c), str(c)) for c in action.choices]
+        choices = (
+            action.choices
+            if callable(action.choices)
+            else [(str(c), str(c)) for c in action.choices]
+        )
+        if is_multi:
+            return forms.MultipleChoiceField(choices=choices, **base_kwargs)
         return forms.ChoiceField(choices=choices, **base_kwargs)
+
+    if is_multi:
+        # Multi-value option without choices: comma/space separated text.
+        field = forms.CharField(**base_kwargs)
+        field.widget = admin_widgets.AdminTextInputWidget()
+        field.help_text = (
+            (help_text + " ") if help_text else ""
+        ) + "(multiple values, comma-separated)"
+        return field
 
     if action.type is int:
         field = forms.IntegerField(**base_kwargs)

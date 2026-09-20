@@ -12,7 +12,28 @@
 </div>
 {% endblock %}
 
-{% block extrastyle %}{{ block.super }}<link rel="stylesheet" href="{% static 'django_admin_runner/ansi-output.css' %}">{% endblock %}
+{% block extrastyle %}{{ block.super }}<link rel="stylesheet" href="{% static 'django_admin_runner/vendor/xterm/xterm.css' %}?v=2026-08-27-2"><link rel="stylesheet" href="{% static 'django_admin_runner/ansi-output.css' %}?v=2026-08-27-2"><link rel="stylesheet" href="{% static 'django_admin_runner/terminals.css' %}?v=2026-09-06-6">{% endblock %}
+
+{% block extrahead %}{{ block.super }}
+<script id="dar-terminal-config" type="application/json">
+{
+    "outputUrl": "{{ dar_output_url }}",
+    "partUrl": "{{ dar_output_part_url }}",
+    "status": "{{ execution.status }}",
+    "cols": {{ dar_term_cols }},
+    "rows": {{ dar_term_rows }},
+    "fit": {{ dar_fit|default:"false" }},
+    "pollInterval": {{ dar_poll_interval }},
+    "stdoutUrl": "{{ stdout_url }}",
+    "stderrUrl": "{{ stderr_url }}",
+    "startedAt": "{{ dar_started_at }}"
+}
+</script>
+<script src="{% static 'django_admin_runner/vendor/xterm/xterm.js' %}?v=2026-08-27-2"></script>
+<script src="{% static 'django_admin_runner/vendor/xterm/addon-webgl.js' %}?v=2026-09-03"></script>
+<script src="{% static 'django_admin_runner/vendor/xterm/addon-fit.js' %}?v=2026-09-06"></script>
+<script src="{% static 'django_admin_runner/terminal-output.js' %}?v=2026-09-06-5"></script>
+{% endblock %}
 
 {% block content_title %}{% endblock %}
 
@@ -24,12 +45,51 @@
     <li>
       <a href="{{ change_url }}">{% trans "Back to detail" %}</a>
     </li>
+    <li>
+      <span id="dar-stop-control">
+      {% if dar_stop_url %}
+      <form method="post" action="{{ dar_stop_url }}" style="display:inline;">
+        {% csrf_token %}
+        {% if dar_stop_force %}
+        <input type="hidden" name="force" value="1">
+        <button type="submit" style="background:#dc3545;color:#fff;border:0;border-radius:4px;padding:6px 12px;font-size:11px;font-weight:600;cursor:pointer;">{% trans "Force Stop" %}</button>
+        {% else %}
+        <button type="submit" style="background:#dc3545;color:#fff;border:0;border-radius:4px;padding:6px 12px;font-size:11px;font-weight:600;cursor:pointer;">{% trans "Stop" %}</button>
+        {% endif %}
+      </form>
+      {% endif %}
+      </span>
+    </li>
   </ul>
 
-  <div class="module">
+  <div class="module dar-output-container">
     <div style="padding: 1em;">
       {{ content }}
     </div>
   </div>
+
+  {% if execution.status == "SUCCESS" or execution.status == "FAILED" or execution.status == "CANCELLED" or execution.status == "TIMEOUT" %}
+  <div class="module" style="margin-top: 1em;">
+    <div style="padding: 0.75em 1em; display: flex; align-items: center; gap: 1em; font-size: 13px;">
+      {% if execution.status == "SUCCESS" %}
+        <span style="color: #28a745; font-weight: 600;">{% trans "Successfully finished" %}</span>
+      {% elif execution.status == "CANCELLED" %}
+        <span style="color: #d97706; font-weight: 600;">{% trans "Cancelled" %}</span>
+      {% elif execution.status == "TIMEOUT" %}
+        <span style="color: #dc2626; font-weight: 600;">{% trans "Timed out" %}</span>
+      {% else %}
+        <span style="color: #dc3545; font-weight: 600;">{% trans "Failed" %}</span>
+      {% endif %}
+      {% if has_stderr and execution.status == "FAILED" %}
+        <span style="color: #ccc;">|</span>
+        <a href="{{ stderr_url }}" style="color: #dc3545;">{% trans "View stderr" %}</a>
+      {% endif %}
+      {% if has_stdout and execution.status == "FAILED" %}
+        <span style="color: #ccc;">|</span>
+        <a href="{{ stdout_url }}" style="color: #0d6efd;">{% trans "View stdout" %}</a>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
 </div>
 {% endblock %}

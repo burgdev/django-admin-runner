@@ -6,7 +6,7 @@ No Docker, no Redis — uses Django ORM as the message broker.
 
 import os
 
-from django.urls import reverse_lazy
+from django.urls import reverse, reverse_lazy
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -68,11 +68,25 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 Q_CLUSTER = {
     "name": "DJANGORM",
     "orm": "default",
-    "retry": 600,
-    "timeout": 300,
+    # Missed schedule slots while the cluster was down are NOT replayed:
+    # each schedule runs once at the next opportunity instead of catching
+    # up every missed slot in a burst.
+    "catch_up": False,
+    # retry must exceed timeout, or q2 re-delivers tasks before they
+    # finish (and re-runs commands).
+    "retry": 7200,
+    # django-q2 SIGKILLs workers whose task exceeds this limit — the task
+    # row then needs a Force Stop to be finalized. Keep it well above the
+    # longest command you run (simulate_workload defaults to 5 min).
+    "timeout": 3600,
 }
 
 ADMIN_RUNNER_BACKEND = "django-q2"
+
+# Terminal layout height for command output (exported as LINES, rich lays
+# out for this): 50 fits the workload simulator's 20 progress bars. The
+# embedded widget height is separate (ADMIN_RUNNER_TERM_VIEW_ROWS, default 20).
+ADMIN_RUNNER_TERM_ROWS = 50
 
 UNFOLD = {
     "SIDEBAR": {
@@ -99,6 +113,50 @@ UNFOLD = {
                         "icon": "terminal",
                         "link": reverse_lazy(
                             "admin:django_admin_runner_registeredcommand_changelist"
+                        ),
+                        # Exact match: Unfold's default active detection is
+                        # substring-based, which would also light up this
+                        # entry on the pinned group views below.
+                        "active": lambda request: request.path
+                        == reverse("admin:django_admin_runner_registeredcommand_changelist"),
+                        "permission": lambda request: request.user.is_staff,
+                    },
+                    {
+                        # Commands changelist pinned to one group, on its
+                        # own URL so the menu entry gets highlighted.
+                        "title": "Maintenance",
+                        "icon": "build",
+                        "link": lambda request=None: reverse(
+                            "admin:django_admin_runner_registeredcommand_group",
+                            args=["Maintenance"],
+                        ),
+                        "active": lambda request: request.path
+                        == reverse(
+                            "admin:django_admin_runner_registeredcommand_group",
+                            args=["Maintenance"],
+                        ),
+                        "permission": lambda request: request.user.is_staff,
+                    },
+                    {
+                        # Multi-group pinned view: "+"-separated groups.
+                        "title": "Data (Import/Export)",
+                        "icon": "sync",
+                        "link": lambda request=None: reverse(
+                            "admin:django_admin_runner_registeredcommand_group",
+                            args=["Import+Export"],
+                        ),
+                        "active": lambda request: request.path
+                        == reverse(
+                            "admin:django_admin_runner_registeredcommand_group",
+                            args=["Import+Export"],
+                        ),
+                        "permission": lambda request: request.user.is_staff,
+                    },
+                    {
+                        "title": "Schedules",
+                        "icon": "schedule",
+                        "link": reverse_lazy(
+                            "admin:django_admin_runner_scheduledcommand_changelist"
                         ),
                         "permission": lambda request: request.user.is_staff,
                     },

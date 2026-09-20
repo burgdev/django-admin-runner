@@ -52,3 +52,22 @@ RQ_QUEUES = {"default": {"HOST": "localhost", "PORT": 6379}}
   updates, stdout/stderr capture, and timestamps.
 - Return a `RunResult` with a valid `redirect_url` (usually the execution detail page).
 - Set `is_async=True` if the command runs in a worker process.
+
+## Optional capabilities
+
+`BaseCommandRunner` declares several opt-in capabilities. Override them if
+your backend supports them — the admin adapts automatically:
+
+| Attribute / method | Effect |
+|---|---|
+| `supports_max_retries = True` | Enables per-command `max_retries=` instead of warning |
+| `supports_force_stop = True` | Shows the **Force Stop** control once a stop was requested |
+| `stop(execution)` | Request a graceful stop (base: sets the `stop_requested` flag; add a SIGTERM-equivalent if you can target the worker) |
+| `force_stop(execution) -> bool` | Hard-kill the worker process; return `True` when performed |
+| `finalize_stale(execution)` | Attribute why a dead worker's execution ended — return `(status, note)` (e.g. `("TIMEOUT", …)`) or `None` |
+| `supported_schedule_kinds` | Schedule kinds your backend can materialize natively (e.g. `frozenset({"cron", "interval", "clocked"})`) — unhides the scheduling UI |
+| `create_schedule` / `update_schedule` / `delete_schedule` / `schedule_next_run` | Materialize `ScheduledCommand` rows into your backend's native periodic tasks |
+
+See [django_q2.py](https://github.com/burgdev/django-admin-runner/blob/main/src/django_admin_runner/runners/django_q2.py)
+for a complete implementation of all of the above, and the
+[Scheduling guide](scheduling.md) for the row/native-object lifecycle.

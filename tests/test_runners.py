@@ -46,7 +46,7 @@ class TestSyncCommandRunner:
         runner = SyncCommandRunner()
         runner.run("simple_command", {}, user, execution)
         execution.refresh_from_db()
-        assert "simple output" in execution.stdout
+        assert "simple output" in execution.output_text("stdout")
 
     def test_failure_status(self, user, failing_execution):
         runner = SyncCommandRunner()
@@ -58,7 +58,7 @@ class TestSyncCommandRunner:
         runner = SyncCommandRunner()
         runner.run("failing_command", {}, user, failing_execution)
         failing_execution.refresh_from_db()
-        assert "intentional failure" in failing_execution.stderr
+        assert "intentional failure" in failing_execution.output_text("stderr")
 
     def test_backend_field_set(self, user, execution):
         runner = SyncCommandRunner()
@@ -236,7 +236,7 @@ class TestDjangoQ2CommandRunner:
             result = runner.run("simple_command", {}, user, execution)
         execution.refresh_from_db()
         assert execution.status == CommandExecution.Status.FAILED
-        assert "broker down" in execution.stderr
+        assert "broker down" in execution.output_text("stderr")
         assert result.is_async is False
         assert result.task_id == ""
 

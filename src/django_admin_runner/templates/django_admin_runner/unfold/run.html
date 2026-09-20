@@ -85,11 +85,30 @@
         </p>
       {% endif %}
 
+      <div class="group mb-8 max-w-2xl">
+        <label for="dar_label"
+               class="block font-semibold mb-2 text-sm text-font-important-light dark:text-font-important-dark">
+          {% trans "Label" %}
+        </label>
+        <input type="text" name="dar_label" id="dar_label" maxlength="200" autocomplete="off"
+               placeholder="{% trans 'Optional label for this run' %}"
+               class="border border-base-300 dark:border-base-700 rounded-default px-3 py-2 text-sm w-full bg-transparent">
+        <p class="mt-1 text-xs text-font-default-light dark:text-font-default-dark">
+          {% trans "Shown in the results list for later reference." %}
+        </p>
+      </div>
+
       <div class="flex items-center gap-4">
         <button type="submit"
                 class="border cursor-pointer font-medium px-3 py-2 rounded-default text-center whitespace-nowrap bg-primary-600 border-transparent text-white text-sm hover:bg-primary-500 transition-colors">
           {% trans "Run command" %}
         </button>
+        {% if add_schedule_url %}
+        <a href="{{ add_schedule_url }}" id="dar-add-schedule-link"
+           class="text-sm font-medium text-primary-600 dark:text-primary-400 hover:underline transition-colors">
+          {% trans "Add schedule" %}
+        </a>
+        {% endif %}
         <a href="{% url 'admin:django_admin_runner_registeredcommand_changelist' %}"
            class="text-sm font-medium text-font-default-light dark:text-font-default-dark hover:text-primary-600 dark:hover:text-primary-400 transition-colors">
           {% trans "Cancel" %}
@@ -100,4 +119,33 @@
   </div>
 
 </div>
+{% endblock %}
+
+{% block footer %}{{ block.super }}
+{% if add_schedule_url %}
+{# Carry the parameters already filled in on the run form to the schedule form. #}
+<script>(function () {
+  var link = document.getElementById('dar-add-schedule-link');
+  var form = link ? link.closest('form') : null;
+  if (!link || !form) return;
+  link.addEventListener('click', function (e) {
+    e.preventDefault();
+    var params = new URLSearchParams();
+    Array.prototype.forEach.call(form.elements, function (el) {
+      if (!el.name || el.type === 'file' || el.tagName === 'BUTTON') return;
+      if (el.type === 'checkbox' || el.type === 'radio') {
+        if (el.checked) params.append(el.name, el.value || 'on');
+      } else if (el.multiple && el.selectedOptions) {
+        Array.prototype.forEach.call(el.selectedOptions, function (opt) {
+          params.append(el.name, opt.value);
+        });
+      } else if (el.value !== '' && el.value !== null) {
+        params.append(el.name, el.value);
+      }
+    });
+    var qs = params.toString();
+    window.location.href = link.href + (qs ? '?' + qs : '');
+  });
+})();</script>
+{% endif %}
 {% endblock %}

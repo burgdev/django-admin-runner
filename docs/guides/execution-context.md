@@ -45,9 +45,14 @@ hook lifecycle.
 
 ## ANSI output
 
-Standard output and stderr are automatically converted from ANSI escape codes
-to styled HTML. Colored output from management commands renders correctly in
-the admin interface.
+Standard output and stderr are rendered in an embedded [xterm.js](https://xtermjs.org/)
+terminal on the execution page — ANSI escape sequences (colors, cursor
+movement, line erase) display exactly as they would in a real terminal, so
+rich progress bars render as a single updating line. While the command is
+running, new output streams to the page every 250 ms. See
+[Admin themes](admin-themes.md#terminal-output-view) for the storage model
+and terminal settings (`COLUMNS`/`LINES` are exported so output layout is
+deterministic).
 
 If the `rich` package is installed, tracebacks are rendered with rich formatting
 for improved readability.

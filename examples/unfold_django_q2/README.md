@@ -38,11 +38,32 @@ make worker   # start django-q2 worker (qcluster)
 | `import_books` | Import | CSV import with `--source`, `--dry-run`, `--limit` |
 | `export_report` | Export | Report export with `--format` choice (csv / json / xlsx) |
 | `cleanup_books` | Maintenance | Removes stale records; `--older-than` threshold |
+| `simulate_workload` | Maintenance | Long-running simulation with live rich progress bars; `--minutes`, `--bars` |
 
-### Scheduled tasks
+### Scheduling commands
 
-The **Scheduled Tasks** section in the sidebar provides access to django-q2's
-built-in Schedule admin. You can create scheduled/recurring commands there.
+Two ways to schedule commands (django-q2 supports all three kinds — cron,
+interval, and one-off):
+
+- **Interactive**: click **Add schedule** next to a command in the overview
+  (or on the run page). The form combines the command's parameter form with
+  a schedule section — pick a kind, fill the kind-specific fields, and save.
+  Existing schedules can be edited (Parameters / Schedule tabs), disabled
+  (the native q2 schedule is removed, the row is kept) or deleted. The
+  global **Schedules** overview lists all schedules with their next run.
+- **Declarative**: `cleanup_books` declares a nightly cron schedule in code:
+
+  ```python
+  @register_command(
+      group="Maintenance",
+      schedule=CronSchedule("0 3 * * *", kwargs={"older-than": 90}),
+  )
+  class Command(BaseCommand): ...
+  ```
+
+  The startup sync materializes it as a `source=code` schedule — the code
+  wins for the schedule spec, the database wins for the enabled flag, so
+  admins can pause it without a deploy.
 
 ### Notes
 

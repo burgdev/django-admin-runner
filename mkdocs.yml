@@ -128,6 +128,9 @@ nav:
       - guides/guides.md
       - guides/decorator.md
       - guides/runners.md
+      - guides/scheduling.md
+      - guides/stopping-commands.md
+      - guides/widgets.md
       - guides/custom-runner.md
       - guides/execution-context.md
       - guides/hooks.md
@@ -139,6 +142,7 @@ nav:
       - api/forms.md
       - api/hooks.md
       - api/runners.md
+      - api/schedules.md
       - api/models.md
       - api/admin.md
   - Examples: examples.md

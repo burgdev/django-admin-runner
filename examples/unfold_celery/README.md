@@ -82,6 +82,12 @@ Per-command Celery tasks (`books.import_books`, `books.export_report`,
 individually in the Celery Beat task selector under
 **Periodic Tasks → Add periodic task**.
 
+> **Note on admin scheduling**: django-admin-runner's built-in "Add schedule"
+> admin UI and `@register_command(schedule=…)` declarations are backend-
+> dependent capabilities (implemented for django-q2). With the Celery runner
+> the "Add schedule" action is hidden; use Celery Beat's periodic-task admin
+> as shown above instead.
+
 ### Notes
 
 - `CELERY_BROKER_URL` defaults to `redis://localhost:6379/0` and can be

@@ -1,0 +1,61 @@
+/* django-admin-runner — status badges for CommandExecution.
+ *
+ * Inline-styled pill badges (theme-independent); only the spinner
+ * animation needs a stylesheet.
+ */
+
+@keyframes dar-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.dar-spin {
+  animation: dar-spin 1s linear infinite;
+}
+
+/* Changelist action buttons (commands list). Base styles are inline
+ * (theme-agnostic); only hover feedback lives here. Disabled buttons
+ * (aria-disabled) keep their faded rest state. */
+.dar-cmdbtn {
+  transition:
+    background-color 0.15s cubic-bezier(0.25, 1, 0.5, 1),
+    border-color 0.15s cubic-bezier(0.25, 1, 0.5, 1),
+    transform 0.15s cubic-bezier(0.25, 1, 0.5, 1),
+    color 0.15s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.dar-cmdbtn:not(.dar-btn-danger):not(.dar-btn-force):not(
+    [aria-disabled]
+  ):hover {
+  /* !important: the tinted Run button sets its background inline,
+     * which would otherwise outrank this hover rule. */
+  background-color: rgba(128, 128, 128, 0.18) !important;
+  border-color: rgba(128, 128, 128, 0.75) !important;
+  color: inherit !important;
+  transform: translateY(-1px);
+}
+
+/* Stop (outlined red): deepen the red tint on hover. */
+.dar-cmdbtn.dar-btn-danger:not([aria-disabled]):hover {
+  background-color: rgba(220, 53, 69, 0.2) !important;
+  border-color: rgba(220, 53, 69, 0.85) !important;
+  color: #dc3545 !important;
+  transform: translateY(-1px);
+}
+
+/* Force Stop (filled red): stay red on hover, just faded/brighter. */
+.dar-cmdbtn.dar-btn-force:not([aria-disabled]):hover {
+  background-color: rgba(220, 53, 69, 0.82) !important;
+  border-color: #dc3545 !important;
+  color: #fff !important;
+  transform: translateY(-1px);
+}
+
+.dar-cmdbtn:not([aria-disabled]):active {
+  transform: translateY(0);
+  background-color: rgba(128, 128, 128, 0.26) !important;
+}

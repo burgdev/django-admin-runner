@@ -13,6 +13,17 @@ class Command(BaseCommand):
             "--mode", choices=["fast", "slow"], default="fast", help="Execution mode"
         )
         parser.add_argument(
+            "--tag",
+            action="append",
+            choices=["alpha", "beta", "gamma"],
+            help="Repeatable choice option",
+        )
+        parser.add_argument(
+            "--name",
+            action="append",
+            help="Repeatable free-text option",
+        )
+        parser.add_argument(
             "--verbose", action="store_true", default=False, help="Enable verbose output"
         )
 

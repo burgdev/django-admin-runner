@@ -43,7 +43,7 @@
 <div class="feature-card">
 <div class="feature-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="6" height="6" rx="1"/><rect x="16" y="2" width="6" height="6" rx="1"/><rect x="9" y="13" width="6" height="6" rx="1"/><path d="M5 8v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8"/><path d="M12 11v2"/></svg></div>
 <h3>Pluggable runners</h3>
-<p>Django Tasks (default), Celery, sync, or write your own for any queue backend.</p>
+<p>Django Tasks (default), Celery, django-q2, sync, or write your own for any queue backend.</p>
 </div>
 
 <div class="feature-card">
@@ -61,13 +61,31 @@
 <div class="feature-card">
 <div class="feature-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></div>
 <h3>Model attachment</h3>
-<p>Show a "Run" button on any model's admin change-list via <code>models=[...]</code>.</p>
+<p>Attach a direct <code>Run</code> button to a model.</p>
 </div>
 
 <div class="feature-card">
 <div class="feature-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 2 12h3v8h6v-6h2v6h6v-8h3Z"/></svg></div>
 <h3>Unfold support</h3>
 <p>Auto-detected. Uses Unfold templates and widgets when installed.</p>
+</div>
+
+<div class="feature-card">
+<div class="feature-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></div>
+<h3>Terminal output</h3>
+<p>stdout/stderr stream into an embedded xterm.js terminal — ANSI colors and progress bars render live, delta-efficiently.</p>
+</div>
+
+<div class="feature-card">
+<div class="feature-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+<h3>Scheduling</h3>
+<p>Cron, interval, and one-off schedules — interactive admin UI or declarative in code, materialized into your backend.</p>
+</div>
+
+<div class="feature-card">
+<div class="feature-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="1"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></div>
+<h3>Stop commands</h3>
+<p>Graceful stop via the output heartbeat, escalating to a hard kill — shown only while the execution is running.</p>
 </div>
 
 </div>
@@ -78,7 +96,9 @@
 - [Quickstart](quickstart.md) — register and run your first command
 - [Decorator reference](../guides/decorator.md) — all `@register_command` options
 - [Runners](../guides/runners.md) — built-in and custom runners
-- [Execution context](../guides/execution-context.md) — rich output and ANSI support
+- [Scheduling](../guides/scheduling.md) — cron, interval, and one-off schedules
+- [Stopping Commands](../guides/stopping-commands.md) — stop running commands
+- [Execution context](../guides/execution-context.md) — rich output and terminal rendering
 - [Hooks](../guides/hooks.md) — run code before and after command execution
-- [Admin themes](../guides/admin-themes.md) — plain Django admin and Unfold
+- [Admin themes](../guides/admin-themes.md) — plain Django admin, Unfold, and the terminal view
 - [Examples](../examples.md) — complete example projects

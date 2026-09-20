@@ -1,0 +1,109 @@
+/* django-admin-runner — execution page terminal layout.
+ *
+ * The terminals keep their fixed column count (xterm sizes itself by cols);
+ * the WRAPPER spans the full content width with the terminal background.
+ * Loaded for both themes via ModelAdmin Media.
+ *
+ * NOTE: Unfold does not render `field-<name>` classes — its rows are
+ * `.form-row/.field-row` with a `.field-line` flex column whose readonly
+ * value is capped at `max-w-2xl` (42rem). We therefore target the row that
+ * CONTAINS our terminal via `:has()` (theme-independent) plus the base
+ * theme's `field-<name>` classes as a fallback.
+ */
+
+/* Unfold (and any theme with the same structure): lift the max-width cap,
+ * allow a horizontal scrollbar instead of clipping, stop break-words from
+ * fighting the xterm DOM. */
+.field-row:has(.dar-terminal) .readonly,
+.field-row:has(.dar-terminal) .grow {
+  max-width: none;
+  width: 100%;
+  overflow-x: auto;
+  white-space: normal;
+}
+
+/* Base theme: readonly rows put the label in a left column — make the
+ * terminal rows full-width blocks instead. */
+.field-stdout_display,
+.field-stderr_display,
+.field-result_html_display {
+  display: block;
+}
+
+.field-stdout_display .readonly,
+.field-stderr_display .readonly,
+.field-result_html_display .readonly {
+  max-width: none;
+  width: 100%;
+  overflow-x: auto;
+  white-space: normal;
+}
+
+.field-stdout_display > label,
+.field-stderr_display > label,
+.field-result_html_display > label {
+  display: block;
+  width: auto;
+  padding-bottom: 4px;
+  float: none;
+}
+
+/* Terminal wrapper: full width, same background, scroll if wider. */
+.dar-terminal {
+  width: 100%;
+  background: #1e1e1e;
+  border-radius: 4px;
+  padding: 4px 0;
+  min-height: 120px;
+  overflow-x: auto;
+  box-sizing: border-box;
+}
+
+/* Combined full-output page: Output/Errors tabs, terminal fills the page. */
+.dar-full {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 260px);
+  /* dvh tracks the dynamic viewport (mobile toolbars) where supported */
+  height: calc(100dvh - 260px);
+  min-height: 300px;
+}
+
+.dar-full-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+  margin-bottom: 4px;
+}
+
+.dar-full-tab {
+  padding: 6px 14px;
+  border: none;
+  background: transparent;
+  color: #9ca3af;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+}
+
+.dar-full-tab.active {
+  color: #fff;
+  border-bottom-color: #fff;
+}
+
+.dar-full-pane {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.dar-full-pane .dar-terminal {
+  flex: 1;
+  min-height: 0;
+}
+
+.dar-hidden {
+  display: none !important;
+}

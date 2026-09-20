@@ -1,0 +1,14 @@
+{% extends "admin/change_form.html" %}
+{% load static i18n %}
+
+{% block extrahead %}{{ block.super }}
+{% if not dar_is_unfold %}
+<link rel="stylesheet" href="{% static 'django_admin_runner/execution-tabs.css' %}?v=2026-09-10">
+{% endif %}
+{% endblock %}
+
+{% block footer %}{{ block.super }}
+{% if not dar_is_unfold %}
+<script src="{% static 'django_admin_runner/execution-tabs.js' %}?v=2026-09-10"></script>
+{% endif %}
+{% endblock %}

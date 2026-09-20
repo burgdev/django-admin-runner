@@ -1,0 +1,117 @@
+{% extends "admin/change_form.html" %}
+{% load static i18n %}
+
+{% block extrahead %}{{ block.super }}
+{% if not dar_is_unfold %}
+<link rel="stylesheet" href="{% static 'django_admin_runner/execution-tabs.css' %}?v=2026-09-03">
+{% endif %}
+<script id="dar-terminal-config" type="application/json">
+{
+    "outputUrl": "{{ dar_output_url }}",
+    "partUrl": "{{ dar_output_part_url }}",
+    "status": "{{ original.status }}",
+    "cols": {{ dar_term_cols }},
+    "rows": {{ dar_term_rows }},
+    "fit": {{ dar_fit|default:"false" }},
+    "pollInterval": {{ dar_poll_interval }},
+    "stdoutUrl": "{{ stdout_url }}",
+    "stderrUrl": "{{ stderr_url }}",
+    "startedAt": "{{ dar_started_at }}"
+}
+</script>
+{% endblock %}
+
+{% block footer %}{{ block.super }}
+{% if not dar_is_unfold %}
+<script src="{% static 'django_admin_runner/execution-tabs.js' %}?v=2026-09-03"></script>
+{% endif %}
+{# Stop / Force Stop — server-rendered when RUNNING, live-updated by #}
+{# terminal-output.js (PENDING → RUNNING transition inserts it without reload). #}
+{# The container is always present so the widget can populate it later. #}
+<span id="dar-stop-control" hidden>
+{% if dar_stop_url %}
+<a id="dar-stop-link" href="{{ dar_stop_url }}"
+   data-force="{% if dar_stop_force %}1{% else %}0{% endif %}"
+   onclick="return darStop(event, this);"
+   {% if dar_is_unfold %}
+   {% if dar_stop_force %}
+   style="background:#dc2626; color:#fff; border:2px solid #dc2626; border-radius:0.5rem; padding:0.45rem 0.9rem; font-size:0.875rem; font-weight:600; text-decoration:none; display:inline-block; margin-left:0.75rem; white-space:nowrap;"
+   {% else %}
+   style="background:rgba(220,38,38,0.08); color:#dc2626; border:2px solid rgba(220,38,38,0.55); border-radius:0.5rem; padding:0.45rem 0.9rem; font-size:0.875rem; font-weight:600; text-decoration:none; display:inline-block; margin-left:0.75rem; white-space:nowrap;"
+   {% endif %}
+   {% else %}
+   {% if dar_stop_force %}
+   style="background:#dc3545; color:#fff; border-radius:6px; padding:8px 14px; font-size:0.8125rem; font-weight:600; cursor:pointer; text-decoration:none; display:inline-block; margin-left:8px; white-space:nowrap;"
+   {% else %}
+   style="background:rgba(220,53,69,0.08); color:#dc3545; border:2px solid rgba(220,53,69,0.55); border-radius:6px; padding:8px 14px; font-size:0.8125rem; font-weight:600; cursor:pointer; text-decoration:none; display:inline-block; margin-left:8px; white-space:nowrap;"
+   {% endif %}
+   {% endif %}
+>{% if dar_stop_force %}{% trans "Force Stop" %}{% else %}{% trans "Stop" %}{% endif %}</a>
+{% endif %}
+</span>
+<script>(function () {
+  var control = document.getElementById('dar-stop-control');
+  var row = document.getElementById('submit-row');
+  if (!control || !row) return;
+  var flex = row.querySelector('[class*="flex-row-reverse"]') || row;
+  flex.insertBefore(control, flex.firstChild);
+  control.hidden = false;
+})();
+function darStop(ev, link) {
+  ev.preventDefault();
+  var form = document.createElement('form');
+  form.method = 'post';
+  form.action = link.href;
+  form.style.display = 'none';
+  var csrf = document.querySelector('input[name=csrfmiddlewaretoken]');
+  var meta = document.querySelector('meta[name=csrf-token]');
+  var token = csrf ? csrf.value : (meta ? meta.content : '');
+  var input = document.createElement('input');
+  input.name = 'csrfmiddlewaretoken';
+  input.value = token;
+  form.appendChild(input);
+  if (link.dataset.force === '1') {
+    var force = document.createElement('input');
+    force.name = 'force';
+    force.value = '1';
+    form.appendChild(force);
+  }
+  document.body.appendChild(form);
+  form.submit();
+  return false;
+}</script>
+{% if dar_rerun_url %}
+{# The submit row is rendered by an inclusion tag, so blocks cannot inject #}
+{# into it — render the link here and move it into the row (first child = #}
+{# rightmost slot in both themes: float-right / flex-row-reverse). #}
+{% if dar_rerun_running %}
+<span id="dar-rerun-link" hidden aria-disabled="true"
+   title="{% trans 'Command is still executing' %}"
+   {% if dar_is_unfold %}
+   style="background:var(--primary-600, #5b6ee1); color:#fff; border-radius:0.5rem; padding:0.55rem 1.1rem; font-size:0.875rem; font-weight:600; display:inline-block; margin-left:0.75rem; white-space:nowrap; opacity:0.5; cursor:not-allowed;"
+   {% else %}
+   style="background:var(--button-bg); color:var(--button-fg); border-radius:4px; padding:10px 15px; font-size:0.8125rem; border:0; display:inline-block; margin-left:8px; white-space:nowrap; opacity:0.5; cursor:not-allowed;"
+   {% endif %}
+>{% trans "Rerun" %}</span>
+{% else %}
+<a id="dar-rerun-link" href="{{ dar_rerun_url }}" hidden
+   {% if dar_is_unfold %}
+   style="background:var(--primary-600, #5b6ee1); color:#fff; border-radius:0.5rem; padding:0.55rem 1.1rem; font-size:0.875rem; font-weight:600; text-decoration:none; display:inline-block; margin-left:0.75rem; white-space:nowrap;"
+   {% else %}
+   style="background:var(--button-bg); color:var(--button-fg); border-radius:4px; padding:10px 15px; font-size:0.8125rem; border:0; cursor:pointer; text-decoration:none; display:inline-block; margin-left:8px; white-space:nowrap;"
+   {% endif %}
+>{% trans "Rerun" %}</a>
+{% endif %}
+<script>(function () {
+  var link = document.getElementById('dar-rerun-link');
+  var row = document.getElementById('submit-row');
+  if (!link || !row) return;
+  // Unfold lays the buttons out in an inner flex-row-reverse container
+  // (first child = rightmost slot); the base theme floats row children
+  // right. Insert into that container when present, else into the row.
+  var flex = row.querySelector('[class*="flex-row-reverse"]') || row;
+  flex.insertBefore(link, flex.firstChild);
+  link.hidden = false;
+})();</script>
+{% endif %}
+{% endblock %}
