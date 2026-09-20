@@ -45,8 +45,8 @@ class CommandExecution(models.Model):
     )
     result_html = models.TextField(blank=True)
     kwargs = models.JSONField(default=dict)
-    stop_requested = models.BooleanField(  # type: ignore[assignment]
-        default=False,
+    stop_requested = models.BooleanField(
+        default=False,  # type: ignore[assignment]
         help_text="Set when a graceful stop was requested from the admin.",
     )
     worker_pid = models.IntegerField(
