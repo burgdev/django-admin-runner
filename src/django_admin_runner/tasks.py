@@ -58,14 +58,17 @@ def _stop_requested(execution) -> bool:
 def _is_timeout_exception(exc: BaseException) -> bool:
     """Whether *exc* is a soft time limit (e.g. Celery SoftTimeLimitExceeded).
 
-    Celery is optional, so fall back to a name check when it is absent.
+    The class name is matched first so behaviour is identical whether or
+    not Celery is installed (the name is specific to the Celery ecosystem);
+    ``isinstance`` adds subclasses of Celery's own exception.
     """
+    if type(exc).__name__ == "SoftTimeLimitExceeded":
+        return True
     try:
         from celery.exceptions import SoftTimeLimitExceeded
-
-        return isinstance(exc, SoftTimeLimitExceeded)
     except ImportError:
-        return type(exc).__name__ == "SoftTimeLimitExceeded"
+        return False
+    return isinstance(exc, SoftTimeLimitExceeded)
 
 
 def sweep_stale_executions() -> int:
