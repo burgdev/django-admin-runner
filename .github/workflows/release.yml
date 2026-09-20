@@ -26,16 +26,19 @@ jobs:
             echo "name=${{ github.event.client_payload.tag }}" >> $GITHUB_OUTPUT
           fi
 
-      - name: Install git-cliff
-        run: uv tool install git-cliff
+      - name: Install just
+        uses: extractions/setup-just@v3
 
-      - name: Generate changelog
+      - name: Get changelog for this version
         id: changelog
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="${{ steps.tag.outputs.name }}"
-          BODY=$(git-cliff --tag "$TAG" --strip all)
+          # Extract the curated section for the current version from
+          # CHANGELOG.md (same task as `just changelog` locally — manual
+          # edits are the source of truth; the section header goes to
+          # stderr, only the body is captured).
+          BODY=$(just changelog)
+          echo "Changelog body:"
+          echo "$BODY"
           {
             echo "body<<EOF"
             echo "$BODY"
