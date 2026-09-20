@@ -8,7 +8,7 @@ from django_admin_runner.schedules import (
     Schedule,
 )
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = [
     "register_command",
