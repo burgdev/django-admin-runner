@@ -80,6 +80,7 @@ screen, and replays the retained output with a truncation notice.
 | `ADMIN_RUNNER_TERM_COLS` | `120` | Terminal width exported as `COLUMNS` during command execution and used to size the widget, so output layout (e.g. progress bar width) is deterministic. |
 | `ADMIN_RUNNER_TERM_ROWS` | `40` | Terminal height exported as `LINES` during command execution (e.g. rich lays out panels for this height). |
 | `ADMIN_RUNNER_TERM_VIEW_ROWS` | `20` | Visible height of the embedded terminal widget. Taller output scrolls in the widget's scrollback. |
+| `ADMIN_RUNNER_FLUSH_INTERVAL` | `0.5` | Seconds between worker output flushes (how often new output is persisted and the stop flag checked). Override per command with `flush_interval=` on `@register_command`. |
 
 Terminal dimensions are a global setting — they apply to future runs and do
 not depend on the caller's or browser's terminal size. URLs in output are not

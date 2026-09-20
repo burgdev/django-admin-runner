@@ -181,9 +181,24 @@ Each demonstrates a different runner and integration pattern.
 
     ### Scheduled tasks
 
-    The example includes a custom `ScheduleAdmin` that replaces django-q2's
-    default admin with a dropdown listing all registered management commands,
-    making it easy to set up recurring commands without knowing dotted paths.
+    django-q2 is the only runner with full schedule support — use the
+    built-in **Add schedule** action next to **Run** on the command pages
+    (cron / interval / one-off, combined with the command's parameter
+    form), or declare schedules in code via
+    `@register_command(schedule=CronSchedule("0 3 * * *"))`. See the
+    [Scheduling guide](scheduling.md).
+
+    The example additionally includes a custom `ScheduleAdmin` for the raw
+    django-q2 `Schedule` model (with a dropdown listing registered
+    management commands) for direct inspection of the materialized native
+    schedules.
+
+    ### Live terminal output demo
+
+    The `simulate_workload` command runs for several minutes writing rich
+    progress bars and colored output — open its result page to watch output
+    stream into the embedded xterm.js terminal in real time (see
+    [Admin themes](admin-themes.md#terminal-output-view)).
 
 === "Unfold + RQ"
 

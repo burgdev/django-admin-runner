@@ -16,6 +16,8 @@ from django_admin_runner import register_command
     display_name=None,
     timeout=None,
     max_retries=0,
+    flush_interval=None,
+    schedule=None,
 )
 class Command(BaseCommand):
     ...
@@ -169,6 +171,42 @@ class Command(BaseCommand):
     For django-q2, set `max_attempts` in `Q_CLUSTER` to control retries
     globally. The runner will log a warning if a command has `max_retries > 0`
     to remind you it's being ignored.
+
+### `flush_interval`
+Output flush cadence in seconds for this command — how often the worker
+persists newly written stdout/stderr (and checks the stop flag). Overrides
+the global `ADMIN_RUNNER_FLUSH_INTERVAL` (default `0.5`). Lower it for
+progress-bar-heavy commands so live output updates more frequently.
+
+```python
+@register_command(flush_interval=0.1)  # live output every 100 ms
+```
+
+### `schedule`
+Declarative schedule(s) for this command — a single `Schedule` instance
+(e.g. `CronSchedule("15 4 * * *")`) or a sequence of them. A single
+declaration defaults its name to the command name; sequences must declare
+explicit, unique names. The startup sync materializes them as `source=code`
+rows: the registry wins for the spec, the database wins for `enabled`
+(admins can pause without a deploy). See the [Scheduling guide](scheduling.md).
+
+```python
+from django_admin_runner import CronSchedule, IntervalSchedule, register_command
+
+@register_command(
+    schedule=[
+        CronSchedule("0 3 * * *", name="nightly-full"),
+        IntervalSchedule(15, name="quick-incremental", kwargs={"limit": 10}),
+    ],
+)
+class Command(BaseCommand):
+    ...
+```
+
+!!! note "Backend support"
+    Scheduling is materialized into the backend's native periodic-task
+    system — currently django-q2 only. On other runners the declaration is
+    inert (rows are still synced, but nothing fires).
 
 ---
 

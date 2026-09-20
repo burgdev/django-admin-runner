@@ -47,6 +47,9 @@ CELERY_BROKER_URL = "redis://localhost:6379/0"
 Enqueues commands as django-q2 tasks. Uses Django's ORM as its message broker,
 so no external services (Redis, Docker) are needed. Requires `django-q2` installed.
 
+The only runner with full schedule support (cron / interval / one-off,
+see [Scheduling](scheduling.md)) and PID-targeted force stop.
+
 ```python
 ADMIN_RUNNER_BACKEND = "django-q2"
 

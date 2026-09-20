@@ -36,7 +36,8 @@
 - **Model attachment** — show a "Run" button on any model's admin change-list via `models=[...]`
 - **Scheduling** — interactive "Add schedule" admin UI (cron / interval / one-off)
   and declarative `@register_command(schedule=…)` schedules, materialized into
-  the backend's native periodic tasks (django-q2; see below)
+  the backend's native periodic tasks (django-q2; see the
+  [scheduling guide](https://burgdev.github.io/django-admin-runner/guides/scheduling/))
 - **Unfold support** — auto-detected, uses Unfold templates and widgets when available
 
 ## Installation
@@ -107,7 +108,7 @@ class Command(BaseCommand):
     ...
 ```
 
-See the [Widget & form customisation](https://burgdev.github.io/django-admin-runner/widgets/) docs for the full reference.
+See the [Widget & form customisation](https://burgdev.github.io/django-admin-runner/guides/widgets/) docs for the full reference.
 
 ## Scheduling
 
