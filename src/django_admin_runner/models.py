@@ -31,9 +31,13 @@ class CommandExecution(models.Model):
         TIMEOUT = "TIMEOUT", "Timed out"
 
     command_name = models.CharField(max_length=200)
-    # Optional label: typed on the run form for manual runs, copied from
-    # the schedule's label for scheduled runs.
-    label = models.CharField(max_length=200, blank=True)
+    label = models.CharField(
+        max_length=200,
+        blank=True,
+        default="",
+        help_text="Optional label: set on the run form (manual runs) "
+        "or copied from the schedule (scheduled runs).",
+    )
     status = models.CharField(
         max_length=20,
         choices=Status.choices,
@@ -41,13 +45,15 @@ class CommandExecution(models.Model):
     )
     result_html = models.TextField(blank=True)
     kwargs = models.JSONField(default=dict)
-    # Set when a (graceful) stop was requested from the admin; the worker
-    # checks this flag on its output-flush heartbeat and on SIGTERM.
-    stop_requested = models.BooleanField(default=False)  # type: ignore[assignment]
-    # OS PID of the process running the command, recorded when the
-    # execution transitions to RUNNING — enables PID-targeted signals
-    # (django-q2 force kill).
-    worker_pid = models.IntegerField(null=True, blank=True)
+    stop_requested = models.BooleanField(  # type: ignore[assignment]
+        default=False,
+        help_text="Set when a graceful stop was requested from the admin.",
+    )
+    worker_pid = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text="OS PID of the process running the command, recorded at start.",
+    )
     schedule = models.ForeignKey(
         "ScheduledCommand",
         null=True,
@@ -211,6 +217,10 @@ class ScheduledCommand(models.Model):
             models.CheckConstraint(
                 condition=models.Q(kind__in=["cron", "interval", "clocked"]),
                 name="django_admin_runner_scheduledcommand_kind_valid",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(source__in=["code", "admin"]),
+                name="django_admin_runner_scheduledcommand_source_valid",
             ),
         ]
 
