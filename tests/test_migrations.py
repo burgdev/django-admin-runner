@@ -17,7 +17,7 @@ class TestOutputPartsMigration:
         # Always end at the latest migration so other tests see full state.
         executor = MigrationExecutor(connection)
         executor.loader.build_graph()
-        executor.migrate([(APP, MIG_0006)])
+        executor.migrate(executor.loader.graph.leaf_nodes())
 
     def _migrate_to(self, name):
         executor = MigrationExecutor(connection)

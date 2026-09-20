@@ -8,6 +8,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from django.core.exceptions import ValidationError
+from django.db import IntegrityError
 from django.test import Client, override_settings
 from django.utils.timezone import localtime
 
@@ -960,3 +961,28 @@ class TestScheduleAdmin:
             f"/admin/django_admin_runner/commandexecution/{execution.pk}/change/"
         )
         assert response.status_code == 200
+
+
+@pytest.mark.django_db(transaction=True)
+class TestScheduledCommandConstraints:
+    """DB-level enforcement of ScheduledCommand field choices."""
+
+    def make_schedule(self, **kwargs):
+        return ScheduledCommand.objects.create(
+            command_name="simple_command",
+            kind=kwargs.pop("kind", "cron"),
+            cron=kwargs.pop("cron", "15 4 * * *"),
+            **kwargs,
+        )
+
+    def test_invalid_source_rejected_at_db_level(self, active_command):
+        with pytest.raises(IntegrityError):
+            self.make_schedule(source="bogus")
+
+    def test_valid_sources_accepted(self, active_command):
+        assert self.make_schedule(source="code").source == "code"
+        assert self.make_schedule(source="admin").source == "admin"
+
+    def test_invalid_kind_rejected_at_db_level(self, active_command):
+        with pytest.raises(IntegrityError):
+            self.make_schedule(kind="bogus", cron="")
