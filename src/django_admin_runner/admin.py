@@ -106,13 +106,19 @@ def _status_badge(obj: CommandExecution) -> SafeString:
 
     Carries ``data-status`` so ``terminal-output.js`` can update it live
     from the output poll (the page polls anyway; the badge follows along).
+    A RUNNING execution with a pending stop request shows as "Stopping"
+    (amber spinner) instead.
     """
     status = str(obj.status)
+    stopping = status == "RUNNING" and obj.stop_requested
     color, tint = _STATUS_COLORS.get(status, ("#6b7280", "rgba(107,114,128,0.14)"))
     icon = _STATUS_ICONS.get(status, _STATUS_ICONS["PENDING"])
     label = obj.get_status_display()
+    if stopping:
+        color, tint = "#d97706", "rgba(217, 119, 6, 0.14)"
+        label = "Stopping"
     html = (
-        f'<span id="dar-status-badge" data-status="{status}"'
+        f'<span id="dar-status-badge" data-status="{status}" data-pk="{obj.pk}"'
         f' style="display:inline-flex;align-items:center;gap:6px;'
         f"padding:2px 10px;border-radius:999px;white-space:nowrap;"
         f'color:{color};background:{tint};font-size:12px;font-weight:600;">'
@@ -327,7 +333,7 @@ def _action_button(
             f'aria-disabled="true">{inner}</span>'
         )
     inner = f"{icon_html}{label}"
-    css_class = f"dar-cmdbtn {extra_class}".strip()
+    css_class = f"dar-cmdbtn dar-btn-{style} {extra_class}".strip()
     return (
         f'<a class="{css_class}" href="{url}" title="{title}" '
         f'style="{base_css}"{data_attrs}>{inner}</a>'
@@ -730,11 +736,26 @@ class CommandExecutionAdmin(_ModelAdminBase):  # type: ignore[misc]
     def triggered_by_display(self, obj: CommandExecution) -> SafeString:
         if obj.schedule_id:
             label = str(obj.schedule.label or obj.schedule.command_name) if obj.schedule else ""
-            who = "scheduled"
             icon = f'<span title="Scheduled run: {label}" style="color:var(--body-quiet-color,#888);">{self._CLOCK_ICON}</span>'  # noqa: E501
+            if obj.schedule:
+                url = reverse(
+                    "admin:django_admin_runner_scheduledcommand_change",
+                    args=[obj.schedule_id],
+                )
+                kind = str(obj.schedule.get_kind_display())
+                who = f'<a href="{url}" title="Scheduled run: {label}">{kind}</a>'
+            else:
+                who = "scheduled"
         else:
-            who = str(obj.triggered_by) if obj.triggered_by_id else "—"
             icon = f'<span title="Manual run" style="color:var(--body-quiet-color,#888);">{self._PERSON_ICON}</span>'  # noqa: E501
+            if obj.triggered_by_id and obj.triggered_by:
+                url = reverse(
+                    f"admin:{obj.triggered_by._meta.app_label}_{obj.triggered_by._meta.model_name}_change",  # noqa: E501
+                    args=[obj.triggered_by_id],
+                )
+                who = f'<a href="{url}">{obj.triggered_by}</a>'
+            else:
+                who = "—"
         return cast(SafeString, mark_safe(f"{icon} {who}"))
 
     @admin.display(description="Status", ordering="status")
@@ -839,57 +860,66 @@ class CommandExecutionAdmin(_ModelAdminBase):  # type: ignore[misc]
         """Row actions. First slot depends on state: Stop/Force Stop while
         running (replacing Rerun — you rarely want to re-launch something
         that is still running), Rerun otherwise. Then View/Output/Errors
-        and, for scheduled runs, the schedule settings gear."""
-        parts: list[str] = []
+        and, for scheduled runs, the schedule settings gear.
 
-        # --- first slot: stop (running) or rerun (finished) ---
+        While running, the Rerun button is rendered too (hidden) so the
+        changelist poller can swap the slots in place when the execution
+        finalizes — no client-side button construction, no page reload.
+        """
+        parts: list[str] = []
+        running = obj.status == CommandExecution.Status.RUNNING
+
+        # --- rerun (rendered always; hidden while running) ---
         request = getattr(self, "_list_request", None)
         entry = _registry.get(str(obj.command_name))
-        if obj.status == CommandExecution.Status.RUNNING:
-            # Stop (graceful) / Force Stop (after a stop was requested and
-            # the backend supports hard kills). Mirrors the execution page.
-            if request is not None and self.has_stop_permission(request):
-                force = obj.stop_requested
-                if not force or get_runner().supports_force_stop:
-                    parts.append(
-                        _action_button(
-                            icon=_STOP_ICON,
-                            url=self._stop_url(obj),
-                            title=("Force stop (kill the worker)" if force else "Stop (graceful)"),
-                            # Outlined red for the graceful stop, filled red
-                            # once it escalates to a hard kill.
-                            style="force" if force else "danger",
-                            # The stop endpoint is POST-only; the changelist
-                            # wraps rows in a form (no nested forms), so a
-                            # delegated JS handler in terminal-output.js
-                            # turns this link into the POST.
-                            extra_class="dar-stop-post",
-                            data_attrs=f'data-force="{1 if force else 0}"',
-                        )
-                    )
-        elif entry is not None and request is not None and has_permission(request.user, entry):
+        if entry is not None and request is not None and has_permission(request.user, entry):
             run_url = reverse("admin:django_admin_runner_command_run", args=[obj.command_name])
-            parts.append(
-                _action_button(
-                    icon=_RUN_ICON,
-                    url=f"{run_url}?rerun={obj.pk}",
-                    title="Rerun with the same parameters",
-                    style="tinted",
-                )
+            rerun_html = _action_button(
+                icon=_RUN_ICON,
+                url=f"{run_url}?rerun={obj.pk}",
+                title="Rerun with the same parameters",
+                style="tinted",
             )
         else:
-            parts.append(
-                _action_button(
-                    icon=_RUN_ICON,
-                    disabled=True,
-                    title=(
-                        "No permission to run this command"
-                        if entry is not None
-                        else "Command is no longer registered"
-                    ),
-                    style="tinted",
-                )
+            rerun_html = _action_button(
+                icon=_RUN_ICON,
+                disabled=True,
+                title=(
+                    "No permission to run this command"
+                    if entry is not None
+                    else "Command is no longer registered"
+                ),
+                style="tinted",
             )
+
+        # --- stop (running only) ---
+        stop_html = ""
+        if running and request is not None and self.has_stop_permission(request):
+            force = obj.stop_requested
+            if not force or get_runner().supports_force_stop:
+                stop_html = _action_button(
+                    icon=_STOP_ICON,
+                    url=self._stop_url(obj),
+                    title=("Force stop (kill the worker)" if force else "Stop (graceful)"),
+                    # Outlined red for the graceful stop, filled red
+                    # once it escalates to a hard kill.
+                    style="force" if force else "danger",
+                    # The stop endpoint is POST-only; the changelist
+                    # wraps rows in a form (no nested forms), so a
+                    # delegated JS handler in terminal-output.js
+                    # turns this link into the POST. ``data-sf``
+                    # tells it whether a Force Stop can follow.
+                    extra_class="dar-stop-post",
+                    data_attrs=(
+                        f'data-force="{1 if force else 0}" '
+                        f'data-sf="{1 if get_runner().supports_force_stop else 0}"'
+                    ),
+                )
+
+        parts.append(
+            f'<span class="dar-row-stop"{" hidden" if not stop_html else ""}>{stop_html}</span>'
+            f'<span class="dar-row-rerun"{" hidden" if running else ""}>{rerun_html}</span>'
+        )
 
         # Scheduled runs: gear icon linking to the schedule's settings.
         if obj.schedule_id:
@@ -1377,6 +1407,10 @@ class CommandExecutionAdmin(_ModelAdminBase):  # type: ignore[misc]
                     "cursor": "",
                     "finished": finished,
                     "reset": False,
+                    # Included here too (not just in the main return): a
+                    # RUNNING execution with no flushed stdout yet must
+                    # still report its stop state to the pollers.
+                    "stop": self._stop_info(request, execution),
                 }
             )
 

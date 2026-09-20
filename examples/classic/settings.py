@@ -72,4 +72,6 @@ TASKS = {
     }
 }
 
-# Uses DjangoTaskRunner by default (no ADMIN_RUNNER_BACKEND needed)
+# Uses DjangoTaskRunner by default (no ADMIN_RUNNER_BACKEND needed).
+# No periodic scheduler on this backend: the admin's schedule UI is
+# hidden here (schedules are materialized into django-q2 only).

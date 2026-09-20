@@ -582,6 +582,29 @@ def _revert_debugsqlshell_monkeypatch() -> None:
         pass
 
 
+def _schedule_run_overlaps(schedule) -> bool:
+    """Whether *schedule* still has a live (pending/running) execution.
+
+    Guards against overlapping scheduled runs: one execution per schedule
+    at a time. Only *recent* executions block — older ones are assumed
+    dead (worker lost; the stale sweep will finalize them) so a stuck row
+    cannot starve the schedule forever. Window:
+    ``ADMIN_RUNNER_STALE_AFTER`` seconds (default 1 h).
+    """
+    from datetime import timedelta
+
+    from django.utils.timezone import now
+
+    from .models import CommandExecution
+
+    cutoff = now() - timedelta(seconds=int(getattr(settings, "ADMIN_RUNNER_STALE_AFTER", 3600)))
+    return CommandExecution.objects.filter(
+        schedule_id=schedule.pk,
+        status__in=[CommandExecution.Status.PENDING, CommandExecution.Status.RUNNING],
+        created_at__gte=cutoff,
+    ).exists()
+
+
 def run_scheduled_command(command_name: str, kwargs: dict, schedule_pk: int | None = None) -> None:
     """Schedule-safe entry point: create the execution at run time, then run.
 
@@ -600,6 +623,19 @@ def run_scheduled_command(command_name: str, kwargs: dict, schedule_pk: int | No
     schedule = (
         ScheduledCommand.objects.filter(pk=schedule_pk).first() if schedule_pk is not None else None
     )
+    if schedule is not None and _schedule_run_overlaps(schedule):
+        # A previous run of this schedule is still pending/running (e.g.
+        # the worker died and the row is awaiting the stale sweep, or the
+        # command outgrew its interval). Skip this slot instead of piling
+        # another run on top — one execution per schedule at a time.
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "Skipping scheduled run of %r (schedule %s): previous run still pending/running.",
+            command_name,
+            schedule.pk,
+        )
+        return
     from .runners import get_runner
 
     execution = CommandExecution.objects.create(

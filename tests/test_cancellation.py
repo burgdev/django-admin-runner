@@ -440,9 +440,11 @@ class TestResultsRowStopButton:
     def test_stop_button_while_running(self, admin_client, superuser):
         ex, body = self._list(admin_client, superuser, status=CommandExecution.Status.RUNNING)
         assert f'href="{self._stop_url(ex)}"' in body
-        # Stop replaces the rerun button while running.
+        # Stop is the visible first slot; Rerun is pre-rendered hidden so
+        # the poller can swap the slots in place when the run finalizes.
         run_url = reverse("admin:django_admin_runner_command_run", args=[ex.command_name])
-        assert f"{run_url}?rerun={ex.pk}" not in body
+        assert f"{run_url}?rerun={ex.pk}" in body
+        assert 'class="dar-row-rerun" hidden' in body
 
     def test_no_stop_button_when_stop_requested_unsupported(self, admin_client, superuser):
         # django-tasks default backend: no force support → after a stop

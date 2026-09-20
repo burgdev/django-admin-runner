@@ -79,6 +79,8 @@ RQ_QUEUES = {
 }
 
 # Use the custom RQ runner defined in runners.py
+# No periodic scheduler on this backend: the admin's schedule UI is
+# hidden here (schedules are materialized into django-q2 only).
 ADMIN_RUNNER_BACKEND = "runners.RqCommandRunner"
 
 UNFOLD = {

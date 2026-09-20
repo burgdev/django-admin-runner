@@ -243,6 +243,40 @@ class TestRunScheduledCommand:
         execution = CommandExecution.objects.latest("pk")
         assert execution.schedule_id == schedule.pk
 
+    def test_overlapping_run_skipped(self, active_command):
+        # One execution per schedule at a time: while a previous run is
+        # still pending/running, the next slot is skipped.
+        schedule = ScheduledCommand.objects.create(
+            command_name="simple_command", kind="cron", cron="0 0 * * *", label="daily"
+        )
+        CommandExecution.objects.create(
+            command_name="simple_command",
+            schedule=schedule,
+            status=CommandExecution.Status.RUNNING,
+        )
+        run_scheduled_command("simple_command", {}, schedule_pk=schedule.pk)
+        assert CommandExecution.objects.count() == 1
+
+    def test_stale_overlapping_run_does_not_block(self, active_command, settings):
+        # A pending/running row older than ADMIN_RUNNER_STALE_AFTER is
+        # assumed dead — the schedule must not starve.
+        from datetime import timedelta
+
+        from django.utils.timezone import now
+
+        settings.ADMIN_RUNNER_STALE_AFTER = 60
+        schedule = ScheduledCommand.objects.create(
+            command_name="simple_command", kind="cron", cron="0 0 * * *", label="daily"
+        )
+        stale = CommandExecution.objects.create(
+            command_name="simple_command",
+            schedule=schedule,
+            status=CommandExecution.Status.RUNNING,
+        )
+        CommandExecution.objects.filter(pk=stale.pk).update(created_at=now() - timedelta(hours=2))
+        run_scheduled_command("simple_command", {}, schedule_pk=schedule.pk)
+        assert CommandExecution.objects.count() == 2
+
     def test_failure_path(self, active_command):
         RegisteredCommand.objects.get_or_create(name="failing_command")
         with pytest.raises(Exception):

@@ -68,6 +68,10 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 Q_CLUSTER = {
     "name": "DJANGORM",
     "orm": "default",
+    # Missed schedule slots while the cluster was down are NOT replayed:
+    # each schedule runs once at the next opportunity instead of catching
+    # up every missed slot in a burst.
+    "catch_up": False,
     # retry must exceed timeout, or q2 re-delivers tasks before they
     # finish (and re-runs commands).
     "retry": 7200,

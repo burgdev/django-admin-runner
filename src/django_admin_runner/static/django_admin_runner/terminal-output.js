@@ -498,12 +498,20 @@
     TIMEOUT: "Timed out",
   };
 
-  function updateStatusBadge(status) {
+  function updateStatusBadge(status, stopping) {
     var badge = document.getElementById("dar-status-badge");
-    if (!badge || !status || badge.dataset.status === status) return;
+    if (!badge || !status || (badge.dataset.status === status && !stopping))
+      return;
     var style = BADGE_STYLES[status];
     if (!style) return;
     badge.dataset.status = status;
+    if (stopping && status === "RUNNING") {
+      // Stop requested, worker hasn't confirmed yet: amber spinner.
+      badge.style.color = "#d97706";
+      badge.style.background = "rgba(217, 119, 6, 0.14)";
+      badge.innerHTML = style.icon + "Stopping";
+      return;
+    }
     badge.style.color = style.color;
     badge.style.background = style.tint;
     badge.innerHTML = style.icon + (BADGE_LABELS[status] || status);
@@ -560,6 +568,10 @@
         credentials: "same-origin",
       })
         .then(function () {
+          // Always reload: whether the stop was accepted or rejected
+          // (403/400, or a redirect to the login page for expired
+          // sessions — fetch follows redirects), the server-rendered
+          // state is the truth either way.
           window.location.reload();
         })
         .catch(function () {
@@ -653,7 +665,10 @@
         if (!running || stopped) return;
         return fetchAll().then(function (results) {
           var data = results && results[0];
-          if (data && data.status) updateStatusBadge(data.status);
+          // "Stopping" only when a stop was actually requested (force
+          // flag), not when a stop button is merely available.
+          if (data && data.status)
+            updateStatusBadge(data.status, !!(data.stop && data.stop.force));
           if (data) updateStopControl(data.stop);
           if (data && data.finished) {
             stopPolling(data.status);
@@ -674,7 +689,8 @@
             results.filter(function (r) {
               return r;
             })[0];
-          if (any && any.status) updateStatusBadge(any.status);
+          if (any && any.status)
+            updateStatusBadge(any.status, !!(any.stop && any.stop.force));
           updateStopControl(any && any.stop);
           var data =
             results &&
@@ -713,14 +729,24 @@
   // and the changelist wraps rows in a form (no nested forms allowed),
   // so the link is turned into a fetch POST here. Registered at module
   // scope — pages without terminals (the changelist) skip init() early.
+  // Amber "Stopping" badge (shared by the click handler and the poller).
+  function setBadgeStopping(badge) {
+    if (!badge || badge.dataset.status === "stopping") return;
+    badge.dataset.status = "stopping";
+    badge.style.color = "#d97706";
+    badge.style.background = "rgba(217, 119, 6, 0.14)";
+    badge.innerHTML = BADGE_STYLES.RUNNING.icon + "Stopping";
+  }
+
   document.addEventListener("click", function (ev) {
     var link = ev.target.closest ? ev.target.closest("a.dar-stop-post") : null;
     if (!link) return;
     ev.preventDefault();
     if (link.dataset.stopPosted) return;
     link.dataset.stopPosted = "1";
+    var wasForce = link.dataset.force === "1";
     var body = new URLSearchParams();
-    if (link.dataset.force === "1") body.set("force", "1");
+    if (wasForce) body.set("force", "1");
     var match = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
     fetch(link.href, {
       method: "POST",
@@ -731,13 +757,149 @@
       body: body.toString(),
       credentials: "same-origin",
     })
-      .then(function () {
-        window.location.reload();
+      .then(function (r) {
+        if (!r.ok) {
+          // Rejected (403/400/…). fetch follows redirects, so an expired
+          // session also lands here as an HTML login page — reload to
+          // show the server's truth instead of a fake flipped button.
+          delete link.dataset.stopPosted;
+          window.location.reload();
+          return;
+        }
+        if (wasForce) {
+          // Force stop finalizes immediately — reload to show it.
+          window.location.reload();
+          return;
+        }
+        // Graceful stop requested: flip this row's badge to "Stopping"
+        // right away (the 2 s poll would usually miss the sub-second
+        // window before the worker honors the stop), then flip the
+        // button to Force Stop in place; the changelist poll reloads the
+        // page once the status actually finalizes.
+        delete link.dataset.stopPosted;
+        var row = link.closest("tr");
+        if (row) setBadgeStopping(row.querySelector('[id="dar-status-badge"]'));
+        if (link.dataset.sf === "1") {
+          link.dataset.force = "1";
+          link.title = "Force stop (kill the worker)";
+          link.classList.remove("dar-btn-danger");
+          link.classList.add("dar-btn-force");
+          link.style.background = "#dc3545";
+          link.style.color = "#fff";
+          link.style.borderColor = "#dc3545";
+          var icon = link.querySelector("span");
+          if (icon) icon.style.color = "#fff";
+        } else {
+          // No force stop available (sync / django-tasks): the request
+          // is all we can do — fade the button out.
+          link.style.opacity = ".4";
+          link.style.pointerEvents = "none";
+          link.removeAttribute("href");
+        }
       })
       .catch(function () {
         delete link.dataset.stopPosted;
       });
   });
+
+  // Results changelist: live-refresh while any row is still pending or
+  // running (the change/result pages poll on their own; the changelist
+  // would otherwise keep showing a stale Running badge after a stop or
+  // finish until manually reloaded). Polls EVERY active row's status via
+  // the output endpoint (the first-active row may be a different one
+  // than the row the user stopped) and transitions finalized rows in
+  // place — badge, stop→rerun slot swap — without a page reload (the
+  // rerun button is pre-rendered hidden server-side for exactly this).
+  // Deferred to DOM ready: the admin loads this script in <head>, before
+  // the table rows (and their badges) exist.
+
+  // Final badge state (any status), used by the changelist poller's
+  // in-place transition — no page reload.
+  function applyBadge(badge, status) {
+    var style = BADGE_STYLES[status];
+    if (!style) return false;
+    badge.dataset.status = status;
+    badge.style.color = style.color;
+    badge.style.background = style.tint;
+    badge.innerHTML = style.icon + (BADGE_LABELS[status] || status);
+    return true;
+  }
+
+  var changelistRefresh = function () {
+    if (
+      !/\/django_admin_runner\/commandexecution\/?$/.test(
+        window.location.pathname,
+      )
+    ) {
+      return;
+    }
+    var badges = Array.prototype.slice
+      .call(
+        document.querySelectorAll(
+          '#dar-status-badge[data-status="RUNNING"], #dar-status-badge[data-status="PENDING"]',
+        ),
+      )
+      .filter(function (b) {
+        return b.dataset.pk;
+      });
+    if (!badges.length) return;
+    var base = window.location.pathname.replace(/\/$/, "");
+    var pollRow = function (badge) {
+      return fetch(
+        base + "/" + badge.dataset.pk + "/output/?field=stdout&cursor=",
+        {
+          credentials: "same-origin",
+        },
+      ).then(function (r) {
+        return r.ok ? r.json() : null;
+      });
+    };
+    var poll = function () {
+      Promise.all(
+        badges.map(function (badge) {
+          return pollRow(badge).then(function (data) {
+            return { badge: badge, data: data };
+          });
+        }),
+      )
+        .then(function (results) {
+          results.forEach(function (r) {
+            if (!r.data) return; // 403/404/etc for this row: ignore
+            if (r.data.status !== "RUNNING" && r.data.status !== "PENDING") {
+              // Finalized: transition the row in place — final badge,
+              // stop slot out, (pre-rendered) rerun slot in. No reload.
+              var tr = r.badge.closest("tr");
+              if (tr) {
+                var stopSlot = tr.querySelector(".dar-row-stop");
+                if (stopSlot) stopSlot.hidden = true;
+                var rerunSlot = tr.querySelector(".dar-row-rerun");
+                if (rerunSlot) rerunSlot.hidden = false;
+              }
+              applyBadge(r.badge, r.data.status);
+              r.badge.dataset.done = "1";
+              return;
+            }
+            // "Stopping" only when a stop was actually requested (force
+            // flag), not when a stop button is merely available.
+            if (r.data.stop && r.data.stop.force) setBadgeStopping(r.badge);
+          });
+          // Drop finalized rows from the poll set; stop when none remain.
+          badges = badges.filter(function (b) {
+            return !b.dataset.done;
+          });
+          if (badges.length) setTimeout(poll, 2000);
+        })
+        .catch(function () {
+          setTimeout(poll, 5000);
+        });
+    };
+    setTimeout(poll, 2000);
+  };
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", changelistRefresh);
+  } else {
+    changelistRefresh();
+  }
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", init);
