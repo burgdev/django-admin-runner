@@ -117,8 +117,10 @@ UNFOLD = {
                         # Exact match: Unfold's default active detection is
                         # substring-based, which would also light up this
                         # entry on the pinned group views below.
-                        "active": lambda request: request.path
-                        == reverse("admin:django_admin_runner_registeredcommand_changelist"),
+                        "active": lambda request: (
+                            request.path
+                            == reverse("admin:django_admin_runner_registeredcommand_changelist")
+                        ),
                         "permission": lambda request: request.user.is_staff,
                     },
                     {
@@ -130,10 +132,12 @@ UNFOLD = {
                             "admin:django_admin_runner_registeredcommand_group",
                             args=["Maintenance"],
                         ),
-                        "active": lambda request: request.path
-                        == reverse(
-                            "admin:django_admin_runner_registeredcommand_group",
-                            args=["Maintenance"],
+                        "active": lambda request: (
+                            request.path
+                            == reverse(
+                                "admin:django_admin_runner_registeredcommand_group",
+                                args=["Maintenance"],
+                            )
                         ),
                         "permission": lambda request: request.user.is_staff,
                     },
@@ -145,10 +149,12 @@ UNFOLD = {
                             "admin:django_admin_runner_registeredcommand_group",
                             args=["Import+Export"],
                         ),
-                        "active": lambda request: request.path
-                        == reverse(
-                            "admin:django_admin_runner_registeredcommand_group",
-                            args=["Import+Export"],
+                        "active": lambda request: (
+                            request.path
+                            == reverse(
+                                "admin:django_admin_runner_registeredcommand_group",
+                                args=["Import+Export"],
+                            )
                         ),
                         "permission": lambda request: request.user.is_staff,
                     },
