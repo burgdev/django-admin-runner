@@ -22,7 +22,7 @@ The library SHALL provide frozen `Schedule` value objects with one subclass per 
 - **THEN** the registry records both declarations
 
 ### Requirement: Sync materializes declared schedules
-The startup command sync SHALL create or update `ScheduledCommand` rows (marked `source=code`) for each declared schedule, materializing native backend schedules via the runner. The registry SHALL win for the schedule spec (kind, expression/interval, kwargs); the database SHALL win for `enabled` so admins can pause a declarative schedule without a deploy.
+The sync SHALL create or update `ScheduledCommand` rows (marked `source=code`) for each declared schedule, materializing native backend schedules via the runner. The registry SHALL win for the schedule spec (kind, expression/interval, kwargs); the database SHALL win for `enabled` so admins can pause a declarative schedule without a deploy.
 
 #### Scenario: Sync creates declared schedules
 - **WHEN** a command with two declarations is registered and sync runs

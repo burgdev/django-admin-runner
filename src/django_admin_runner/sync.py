@@ -125,6 +125,17 @@ def sync_declarative_schedules() -> None:
             row.delete()
 
 
+def sync_all() -> None:
+    """Run the full sync: registered commands, then declarative schedules.
+
+    Called from the ``post_migrate`` signal, the ``admin_runner_sync``
+    management command, and — when ``ADMIN_RUNNER_SYNC_ON_READY`` is set —
+    ``AppConfig.ready()``.
+    """
+    sync_registered_commands()
+    sync_declarative_schedules()
+
+
 def _supported_kinds() -> frozenset[str]:
     """Supported schedule kinds of the active runner (empty set on failure)."""
     try:

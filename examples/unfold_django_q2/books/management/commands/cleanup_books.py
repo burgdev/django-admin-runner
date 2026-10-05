@@ -7,7 +7,8 @@ from django_admin_runner import CronSchedule, register_command
     group="Maintenance",
     exclude_params=["verbosity"],
     # Declarative schedule: materialized as a `source=code` ScheduledCommand
-    # row on startup and run nightly at 03:00 by qcluster.
+    # row by the sync (post-migrate / admin_runner_sync) and run nightly at
+    # 03:00 by qcluster.
     schedule=CronSchedule("0 3 * * *", kwargs={"older_than": 90}),
 )
 class Command(BaseCommand):

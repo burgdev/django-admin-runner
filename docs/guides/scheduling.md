@@ -38,8 +38,9 @@ lists every schedule with its kind, parameters, next run, and last run.
 
 ## Declarative (in code)
 
-Declare schedules directly on the decorator — they are materialized on
-startup (in `AppConfig.ready()`) and kept in sync on every deploy:
+Declare schedules directly on the decorator — they are materialized
+whenever the registry syncs: automatically after migrations
+(`post_migrate`) or on demand via `python manage.py admin_runner_sync`:
 
 ```python
 from django_admin_runner import CronSchedule, IntervalSchedule, register_command
@@ -64,7 +65,7 @@ command name. Lists must declare explicit, unique names.
   never rewires schedules. Renaming an entry creates a new schedule;
   the removed declaration's row and native object are deleted.
 - **The registry wins for the schedule spec** (kind, expression, kwargs):
-  edits in code are picked up on the next startup.
+  edits in code are picked up on the next sync.
 - **The database wins for `enabled`** — admins can pause a declarative
   schedule without a deploy; the sync never flips it back on.
 - Admin-created schedules (`source=admin`) are never touched by the sync.
