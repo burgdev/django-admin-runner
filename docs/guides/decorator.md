@@ -186,7 +186,7 @@ progress-bar-heavy commands so live output updates more frequently.
 Declarative schedule(s) for this command — a single `Schedule` instance
 (e.g. `CronSchedule("15 4 * * *")`) or a sequence of them. A single
 declaration defaults its name to the command name; sequences must declare
-explicit, unique names. The startup sync materializes them as `source=code`
+explicit, unique names. The sync materializes them as `source=code`
 rows: the registry wins for the spec, the database wins for `enabled`
 (admins can pause without a deploy). See the [Scheduling guide](scheduling.md).
 

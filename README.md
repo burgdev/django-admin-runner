@@ -149,12 +149,26 @@ class Command(BaseCommand):
     ...
 ```
 
-The startup sync materializes declarations as `source=code` schedule rows
+The sync materializes declarations as `source=code` schedule rows
 keyed by `(command_name, name)` (a single declaration defaults its name to
 the command name; lists require explicit unique names so reordering never
 rewires schedules). The registry wins for the schedule spec, the database
 wins for `enabled` — admins can pause a declarative schedule without a
 deploy. Admin-created schedules are never touched by the sync.
+
+### When the sync runs
+
+`RegisteredCommand` and `source=code` schedule rows materialize when the
+registry is synced — automatically after migrations (`post_migrate`) and on
+demand via `python manage.py admin_runner_sync` (manual runs, worker boot,
+or re-sync after code changes). `AppConfig.ready()` never touches the
+database, so `django.setup()` works without one (image builds running
+`collectstatic`) and is safe with gunicorn `--preload` and pooled
+connections.
+
+Consumers that cannot run migrations during deploy can restore the legacy
+startup sync with `ADMIN_RUNNER_SYNC_ON_READY = True` — not recommended
+with preloaded workers or pooled connections.
 
 ## Development
 

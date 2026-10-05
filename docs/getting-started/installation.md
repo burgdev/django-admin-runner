@@ -27,7 +27,30 @@ INSTALLED_APPS = [
 ]
 ```
 
-That's it. The package auto-discovers registered commands on startup via `AppConfig.ready()`.
+That's it. The package auto-discovers registered commands on startup via
+`AppConfig.ready()` — without touching the database — and syncs them into
+the database automatically after migrations.
+
+## Keeping commands in sync
+
+Discovered commands and declarative schedules materialize as database rows
+when the registry is synced:
+
+- automatically after migrations (`post_migrate` signal), and
+- on demand via `python manage.py admin_runner_sync` — manual runs, worker
+  boot, or re-sync after code changes.
+
+`AppConfig.ready()` performs no database access, so `django.setup()` works
+without a reachable database (image builds running `collectstatic`) and is
+safe with gunicorn `--preload` and pooled connections.
+
+To restore the legacy behavior of syncing during app startup, set:
+
+```python
+ADMIN_RUNNER_SYNC_ON_READY = True
+```
+
+Not recommended with preloaded workers or pooled connections.
 
 ## Optional extras
 

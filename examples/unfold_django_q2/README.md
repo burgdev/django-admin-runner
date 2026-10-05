@@ -61,7 +61,7 @@ interval, and one-off):
   class Command(BaseCommand): ...
   ```
 
-  The startup sync materializes it as a `source=code` schedule — the code
+  The sync materializes it as a `source=code` schedule — the code
   wins for the schedule spec, the database wins for the enabled flag, so
   admins can pause it without a deploy.
 
