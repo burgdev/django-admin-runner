@@ -1,6 +1,6 @@
 [project]
 name = "django-admin-runner"
-version = "0.2.0"
+version = "0.3.0"
 description = "Run Django management commands from the admin with auto-generated forms and pluggable task runners"
 readme = "README.md"
 license = { text = "MIT" }

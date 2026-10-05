@@ -7,6 +7,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-10-05
+
+#### 🏗️ Breaking changes
+- Defer startup command sync to post_migrate and a management command ([#12](https://github.com/burgdev/django-admin-runner/pull/12))
+
+#### 🐛 Fixes
+- Enforce ScheduledCommand.source choices at database level ([#11](https://github.com/burgdev/django-admin-runner/pull/11))
+
+#### 🌀 Others
+- Build release notes from CHANGELOG.md via just changelog ([#10](https://github.com/burgdev/django-admin-runner/pull/10))
+
+[0.3.0]: https://github.com/burgdev/django-admin-runner/compare/v0.2.0..v0.3.0
+
 ## [0.2.0] - 2026-09-20
 
 #### 🚀 Features
