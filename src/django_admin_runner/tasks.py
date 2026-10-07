@@ -5,6 +5,7 @@ import io
 import threading
 import time
 import traceback
+from datetime import timedelta
 
 from django.conf import settings
 from django.core.management import call_command
@@ -30,6 +31,52 @@ def _terminal_size() -> tuple[int, int]:
     cols = int(getattr(settings, "ADMIN_RUNNER_TERM_COLS", 120))
     rows = int(getattr(settings, "ADMIN_RUNNER_TERM_ROWS", 40))
     return max(20, min(cols, 500)), max(5, min(rows, 200))
+
+
+def _heartbeat_interval() -> float:
+    """Seconds between worker liveness heartbeats.
+
+    ``ADMIN_RUNNER_HEARTBEAT_INTERVAL`` (default 30 s). While a command
+    runs, a worker thread refreshes ``last_heartbeat_at`` on this cadence;
+    the stale-run sweeper treats a RUNNING execution whose heartbeat is
+    older than ``ADMIN_RUNNER_HEARTBEAT_STALE_AFTER`` as lost.
+    """
+    return float(getattr(settings, "ADMIN_RUNNER_HEARTBEAT_INTERVAL", 30.0))
+
+
+def _heartbeat_stale_after() -> int:
+    """Seconds after which a stale heartbeat means the worker is gone.
+
+    ``ADMIN_RUNNER_HEARTBEAT_STALE_AFTER`` (default 180 s — six missed
+    heartbeats at the default interval). Keep it comfortably above the
+    heartbeat interval so a single slow or failed update cannot falsely
+    finalize a live worker.
+    """
+    return int(getattr(settings, "ADMIN_RUNNER_HEARTBEAT_STALE_AFTER", 180))
+
+
+def _proc_starttime(pid: int):
+    """Start time of *pid* as a timezone-aware datetime, or ``None``.
+
+    Reads ``/proc/<pid>/stat`` (Linux only; returns ``None`` elsewhere).
+    Used to detect PID reuse: a process occupying a recorded PID whose
+    start time predates the execution cannot be the original worker.
+    """
+    try:
+        with open(f"/proc/{pid}/stat", "rb") as fh:
+            # Field 22 (starttime, 1-based) — after the comm field, which
+            # may contain spaces, so split after the final ')'.
+            fields = fh.read().rsplit(b")", 1)[1].split()
+        starttime_ticks = int(fields[19])  # (22) minus the two consumed
+        with open("/proc/stat", "rb") as fh:
+            btime = next(int(line.split()[1]) for line in fh if line.startswith(b"btime"))
+    except (OSError, ValueError, IndexError, StopIteration):
+        return None
+    from django.utils import timezone
+
+    return timezone.datetime.fromtimestamp(
+        btime + starttime_ticks // 100, tz=timezone.get_current_timezone()
+    )
 
 
 class WorkerStoppedError(Exception):
@@ -71,28 +118,75 @@ def _is_timeout_exception(exc: BaseException) -> bool:
     return isinstance(exc, SoftTimeLimitExceeded)
 
 
+def _worker_is_dead(
+    execution,
+    sweep_from,
+    heartbeat_stale: timedelta,
+    grace: timedelta,
+    stale_after: timedelta,
+) -> bool:
+    """Whether *execution*'s worker is (very likely) gone.
+
+    The heartbeat verdict is authoritative and host-independent: it works
+    across containers because the worker writes its liveness through the
+    shared database, never through the OS. Rows recorded before
+    heartbeats existed (no ``last_heartbeat_at``) fall back to the legacy
+    pid rules — those are only meaningful inside the sweeping process's
+    own PID namespace and are deliberately conservative:
+
+    - inside the grace period → alive;
+    - pid recorded and the process no longer exists (or is a *reused*
+      pid whose process predates the execution) → dead;
+    - no pid recorded and older than ``ADMIN_RUNNER_STALE_AFTER`` → dead.
+    """
+    import errno
+    import os
+
+    if execution.last_heartbeat_at is not None:
+        return execution.last_heartbeat_at <= sweep_from - heartbeat_stale
+
+    # --- legacy rows (recorded by pre-heartbeat workers) ---
+    if execution.started_at is None or execution.started_at > sweep_from - grace:
+        return False
+    pid = execution.worker_pid
+    if not pid:
+        # No pid recorded: age is the only available signal.
+        return execution.started_at <= sweep_from - stale_after
+    try:
+        os.kill(pid, 0)
+    except OSError as exc:
+        return exc.errno == errno.ESRCH  # e.g. EPERM: treat as alive
+    except (ValueError, OverflowError, TypeError):
+        return True  # bogus pid: treat as dead
+    # Something is living at this pid — but on a restarted host/pod that
+    # may be an unrelated, *reused* pid. Only trust it when its start
+    # time matches the execution (unknown start time → assume alive).
+    started = _proc_starttime(pid)
+    return bool(
+        started is not None and execution.started_at is not None and started < execution.started_at
+    )
+
+
 def sweep_stale_executions() -> int:
     """Finalize RUNNING executions whose worker died without finalizing.
 
     A hard kill (django-q2 ``timeout``, Celery ``time_limit``, crash, OOM,
     dead cluster) leaves the row RUNNING: the only writer — the worker —
     is gone. This sweeper runs lazily from admin request handlers and
-    finalizes such rows:
-
-    - ``worker_pid`` recorded and the process no longer exists (grace
-      period past), or
-    - legacy rows without ``worker_pid`` older than
-      ``ADMIN_RUNNER_STALE_AFTER`` seconds (default 1 h).
+    finalizes such rows. Liveness is heartbeat-based (see
+    :func:`_worker_is_dead`): workers refresh ``last_heartbeat_at`` every
+    ``ADMIN_RUNNER_HEARTBEAT_INTERVAL`` seconds, so a RUNNING execution
+    whose heartbeat is older than ``ADMIN_RUNNER_HEARTBEAT_STALE_AFTER``
+    is finalized — a check that works across containers, where PIDs of
+    another pod are invisible. Rows without a heartbeat (recorded by
+    older versions) keep the legacy pid rules.
 
     The runner's ``finalize_stale()`` may attribute the cause (backend
     records → TIMEOUT); otherwise the row becomes FAILED with a
     "worker lost" note. All updates are conditional on ``status=RUNNING``
     so a concurrently finishing worker always wins. Never raises.
     """
-    import errno
     import logging
-    import os
-    from datetime import timedelta
 
     from django.utils.timezone import now
 
@@ -101,6 +195,7 @@ def sweep_stale_executions() -> int:
 
     logger = logging.getLogger(__name__)
     grace = timedelta(seconds=max(10, int(2 * _default_flush_interval())))
+    heartbeat_stale = timedelta(seconds=_heartbeat_stale_after())
     stale_after = timedelta(
         seconds=int(getattr(settings, "ADMIN_RUNNER_STALE_AFTER", 3600)),
     )
@@ -109,26 +204,16 @@ def sweep_stale_executions() -> int:
     runner = None
     swept = 0
     try:
-        candidates = CommandExecution.objects.filter(
-            status=CommandExecution.Status.RUNNING,
-            started_at__lt=sweep_from - grace,
-        )
+        candidates = CommandExecution.objects.filter(status=CommandExecution.Status.RUNNING)
         for execution in candidates:
-            if execution.worker_pid:
-                try:
-                    os.kill(execution.worker_pid, 0)
-                except OSError as exc:
-                    if exc.errno != errno.ESRCH:
-                        continue  # e.g. EPERM: treat as alive
-                except (ValueError, OverflowError, TypeError):
-                    pass  # bogus pid: treat as dead
-                else:
-                    continue  # alive: never sweep, regardless of age
-            elif execution.started_at and execution.started_at > sweep_from - stale_after:
-                continue  # legacy row (no pid): not old enough yet
+            if not _worker_is_dead(execution, sweep_from, heartbeat_stale, grace, stale_after):
+                continue
 
             status = CommandExecution.Status.FAILED
-            note = "Worker process no longer exists (worker lost)."
+            if execution.last_heartbeat_at is not None:
+                note = "Worker heartbeat went stale (worker lost)."
+            else:
+                note = "Worker process no longer exists (worker lost)."
             try:
                 if runner is None:
                     runner = get_runner()
@@ -208,6 +293,41 @@ def _restore_sigterm_handler(installed) -> None:
         signal.signal(signum, previous)
     except (ValueError, OSError):  # pragma: no cover
         pass
+
+
+def _run_heartbeat(execution_pk: int, interval: float, stop_event: threading.Event) -> None:
+    """Refresh ``last_heartbeat_at`` every *interval* until *stop_event*.
+
+    Runs on a daemon thread started by :func:`execute_command`. The
+    heartbeat — not the OS pid — is the liveness signal the stale-run
+    sweeper trusts: it flows through the shared database, so it stays
+    meaningful across container/pod boundaries where PIDs are invisible.
+
+    A failed update (e.g. a brief database outage) is logged and retried
+    on the next tick — the heartbeat must never kill the command it
+    keeps alive.
+    """
+    import logging
+
+    from django.db import connection
+
+    from .models import CommandExecution
+
+    logger = logging.getLogger(__name__)
+    try:
+        while not stop_event.wait(interval):
+            try:
+                CommandExecution.objects.filter(
+                    pk=execution_pk, status=CommandExecution.Status.RUNNING
+                ).update(last_heartbeat_at=now())
+            except Exception:  # noqa: BLE001
+                logger.debug(
+                    "Heartbeat update failed for execution %s", execution_pk, exc_info=True
+                )
+    finally:
+        # Long-lived helper thread: release its DB connection so a pooled
+        # backend (or SQLite's file lock) is not held open for nothing.
+        connection.close()
 
 
 def _append_output(execution, field: str, chunk: str) -> None:
@@ -686,17 +806,35 @@ def execute_command(command_name: str, kwargs: dict, execution_pk: int) -> None:
     # Idempotency guard: claim the execution by transitioning PENDING →
     # RUNNING with this process's PID. A duplicate attempt (e.g. a backend
     # retry after a force-killed worker re-delivers the task) finds the row
-    # in a non-PENDING state and exits without touching it.
+    # in a non-PENDING state and exits without touching it. Host, process
+    # start time and the first heartbeat are recorded here: the host makes
+    # signals namespace-safe, the start time guards against PID reuse, and
+    # the heartbeat is the liveness signal for the stale-run sweeper.
+    import socket
+
     updated = CommandExecution.objects.filter(
         pk=execution_pk, status=CommandExecution.Status.PENDING
     ).update(
         status=CommandExecution.Status.RUNNING,
         started_at=now(),
         worker_pid=os.getpid(),
+        worker_host=socket.gethostname(),
+        worker_started_at=_proc_starttime(os.getpid()),
+        last_heartbeat_at=now(),
     )
     if not updated:
         return
     execution = CommandExecution.objects.get(pk=execution_pk)
+
+    # Liveness heartbeat (daemon thread; stopped in the finally below).
+    heartbeat_stop = threading.Event()
+    heartbeat_thread = threading.Thread(
+        target=_run_heartbeat,
+        args=(execution.pk, _heartbeat_interval(), heartbeat_stop),
+        name=f"dar-heartbeat-{execution.pk}",
+        daemon=True,
+    )
+    heartbeat_thread.start()
 
     # Fail gracefully when the worker is asked to stop (qcluster shutdown
     # sends SIGTERM to its workers). Without this, a stopped cluster leaves
@@ -754,6 +892,12 @@ def execute_command(command_name: str, kwargs: dict, execution_pk: int) -> None:
             import sys
 
             old_stdout, old_stderr = sys.stdout, sys.stderr
+            old_stdin = sys.stdin
+            # Commands run from the admin must never block on interactive
+            # prompts (input(), click.prompt, …): give them an EOF, non-tty
+            # stdin so prompts fail fast instead of hanging the worker
+            # forever with nobody there to answer.
+            sys.stdin = io.StringIO()
             sys.stdout, sys.stderr = stdout_buf, stderr_buf
             # Export the configured terminal size so commands (rich et al.)
             # lay out progress bars deterministically; restore afterwards.
@@ -778,6 +922,7 @@ def execute_command(command_name: str, kwargs: dict, execution_pk: int) -> None:
                         os.environ.pop(key, None)
                     else:
                         os.environ[key] = old_value
+                sys.stdin = old_stdin
                 sys.stdout, sys.stderr = old_stdout, old_stderr
             execution.status = CommandExecution.Status.SUCCESS
         except CommandCancelledError:
@@ -881,4 +1026,6 @@ def execute_command(command_name: str, kwargs: dict, execution_pk: int) -> None:
         if command_exc is not None:
             raise command_exc
     finally:
+        heartbeat_stop.set()
+        heartbeat_thread.join(timeout=2)
         _clear_execution_context()

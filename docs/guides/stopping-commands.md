@@ -34,7 +34,7 @@ hidden once a graceful stop has been requested.
 | Backend | Graceful stop | Force stop | Mechanism |
 |---|---|---|---|
 | `celery` | ✅ | ✅ | stop flag + `revoke(terminate=True, SIGTERM/SIGKILL)` |
-| `django-q2` | ✅ | ✅ | stop flag + PID-targeted SIGTERM/SIGKILL (PID reuse guarded via `/proc`) |
+| `django-q2` | ✅ | ✅ | stop flag + PID-targeted SIGTERM/SIGKILL (only when the worker ran on the same host; PID reuse guarded via `/proc`) |
 | `django` (django.tasks) | ✅ | ❌ | stop flag only |
 | `sync` | ✅ (limited) | ❌ | runs in the request thread — stop flag only |
 
@@ -43,8 +43,14 @@ Notes:
 - A command blocked in a long C call or network I/O without producing
   output only responds to **Force Stop** — and on `sync` / `django` it
   cannot be interrupted at all.
-- django-q2 tasks are enqueued with retries disabled, and `execute_command`
-  refuses duplicate attempts: a force-killed task is never re-run.
+- When the worker ran on a *different host* (e.g. another Kubernetes
+  pod — a PID namespace the admin process cannot see), the PID-targeted
+  signal is skipped for safety and the cooperative stop flag is the
+  only mechanism; a Force Stop finalizes the row while the worker (if
+  it is still alive there) runs on until it next checks the flag.
+- django-q2 tasks are enqueued with `ack_failure` so saved failures are
+  not redelivered, and `execute_command` refuses duplicate attempts:
+  a force-killed task is never re-run.
 
 ## Permissions
 
@@ -65,14 +71,22 @@ forever. Two mechanisms handle this:
   the limit counts as **Cancelled** instead.
 - **Stale-run sweeper** (lazy, no background infra): when an admin page
   or output poll is served, executions that are still Running while
-  their recorded worker process no longer exists are finalized —
-  **Timed out** when the backend's records attribute the kill to a
-  timeout (django-q2 Task record, Celery result state), otherwise
-  **Failed** with a "worker lost" note. Legacy rows without a recorded
-  PID are swept after `ADMIN_RUNNER_STALE_AFTER` seconds (default 1 h).
-  The sweep runs at most once per `ADMIN_RUNNER_SWEEP_INTERVAL` seconds
-  (default 30) per web process and never races a finishing worker
-  (conditional updates).
+  their worker is gone are finalized — **Timed out** when the backend's
+  records attribute the kill to a timeout (django-q2 Task record, Celery
+  result state), otherwise **Failed** with a "worker lost" note.
+
+  Liveness is heartbeat-based: workers refresh `last_heartbeat_at`
+  every `ADMIN_RUNNER_HEARTBEAT_INTERVAL` seconds while running, and a
+  RUNNING execution whose heartbeat is older than
+  `ADMIN_RUNNER_HEARTBEAT_STALE_AFTER` is swept. The heartbeat flows
+  through the database, so it stays meaningful across container/pod
+  boundaries, where the worker's OS PID is invisible to the web
+  processes running the sweep. Rows recorded before heartbeats existed
+  fall back to the legacy PID rules (process gone or PID reused past
+  the flush grace; PID-less rows after `ADMIN_RUNNER_STALE_AFTER`
+  seconds, default 1 h). The sweep runs at most once per
+  `ADMIN_RUNNER_SWEEP_INTERVAL` seconds (default 30) per web process
+  and never races a finishing worker (conditional updates).
 
 Keep backend timeouts well above your longest command, and prefer soft
 limits where available — they produce the cleanest result.
@@ -82,7 +96,9 @@ Settings:
 | Setting | Default | Meaning |
 |---|---|---|
 | `ADMIN_RUNNER_SWEEP_INTERVAL` | `30` | Min. seconds between sweeps per web process |
-| `ADMIN_RUNNER_STALE_AFTER` | `3600` | Age before PID-less Running rows are swept |
+| `ADMIN_RUNNER_STALE_AFTER` | `3600` | Age before PID-less Running rows (no heartbeat) are swept |
+| `ADMIN_RUNNER_HEARTBEAT_INTERVAL` | `30` | Seconds between worker liveness heartbeat updates |
+| `ADMIN_RUNNER_HEARTBEAT_STALE_AFTER` | `180` | Age after which a stale heartbeat means the worker is lost |
 
 ## Command contract
 

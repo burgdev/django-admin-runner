@@ -193,7 +193,11 @@ class TestRunnerStopApi:
 
         ex = _make_execution(superuser)
         DjangoQ2CommandRunner().run("simple_command", {}, superuser, ex)
-        assert captured["q_options"]["retry"] == -1
+        # Failed tasks are acked immediately (no broker redelivery); the
+        # per-task "retry" key is not set at all (django-q2 drops unknown
+        # q_options keys silently).
+        assert captured["q_options"]["ack_failure"] is True
+        assert "retry" not in captured["q_options"]
 
     def test_q2_pid_reuse_guard(self, superuser, monkeypatch):
         from django.utils.timezone import now as tz_now
@@ -211,7 +215,8 @@ class TestRunnerStopApi:
         from datetime import timedelta
 
         monkeypatch.setattr(
-            runner, "_proc_starttime", staticmethod(lambda pid: tz_now() - timedelta(hours=1))
+            "django_admin_runner.tasks._proc_starttime",
+            lambda pid: tz_now() - timedelta(hours=1),
         )
         killed = []
         monkeypatch.setattr("os.kill", lambda pid, sig: killed.append((pid, sig)))

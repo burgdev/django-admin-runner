@@ -54,6 +54,26 @@ class CommandExecution(models.Model):
         blank=True,
         help_text="OS PID of the process running the command, recorded at start.",
     )
+    worker_host = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",  # type: ignore[assignment]
+        help_text="Host (machine or container) running the command, recorded at start. "
+        "PIDs are only meaningful inside their own PID namespace, so stop signals "
+        "are only sent when this matches the local host.",
+    )
+    worker_started_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Start time of the worker OS process, recorded at start. "
+        "Compared against the process currently holding the PID to detect reuse.",
+    )
+    last_heartbeat_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Liveness heartbeat refreshed periodically by the worker while running. "
+        "The stale-run sweeper finalizes RUNNING executions whose heartbeat went stale.",
+    )
     schedule = models.ForeignKey(
         "ScheduledCommand",
         null=True,
