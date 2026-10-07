@@ -1,6 +1,9 @@
+import signal
+import socket
 import sys
 import unittest.mock
 from contextlib import contextmanager
+from datetime import UTC, datetime
 
 import pytest
 from django.contrib.auth import get_user_model
@@ -240,6 +243,92 @@ class TestDjangoQ2CommandRunner:
         assert result.is_async is False
         assert result.task_id == ""
 
+    def test_enqueue_options(self, user, execution):
+        """Failed tasks are acked (no redelivery) and rows stay auditable."""
+        from django_admin_runner.runners.django_q2 import DjangoQ2CommandRunner
+
+        runner = DjangoQ2CommandRunner()
+        with _mock_django_q(return_value="abc-123") as mock_async:
+            runner.run("simple_command", {}, user, execution)
+        kwargs = mock_async.call_args.kwargs
+        assert kwargs["task_name"] == f"admin-runner:{execution.pk}"
+        assert kwargs["q_options"]["ack_failure"] is True
+        # django-q2 drops unknown q_options keys: a per-task "retry" would
+        # be silently ignored, so it must not be set.
+        assert "retry" not in kwargs["q_options"]
+
+    def test_finalize_stale_matches_task_by_id(self, execution):
+        """Attribution looks up the q2 Task by *id*, not by humanhash name."""
+        from django_admin_runner.runners.django_q2 import DjangoQ2CommandRunner
+
+        execution.task_id = "9a3b052a"  # q2 Task.id (a UUID hex)
+        task = unittest.mock.MagicMock(success=False, stopped=True, result="execution timed out")
+        manager = unittest.mock.MagicMock()
+        manager.filter.return_value.first.return_value = task
+        fake_models = unittest.mock.MagicMock(Task=unittest.mock.MagicMock(objects=manager))
+        with _mock_django_q_models(fake_models):
+            status, note = DjangoQ2CommandRunner().finalize_stale(execution)
+        manager.filter.assert_called_once_with(pk="9a3b052a")
+        assert status == CommandExecution.Status.TIMEOUT
+        assert "timed out" in note
+
+    def test_finalize_stale_no_task_is_none(self, execution):
+        from django_admin_runner.runners.django_q2 import DjangoQ2CommandRunner
+
+        execution.task_id = "missing-id"
+        manager = unittest.mock.MagicMock()
+        manager.filter.return_value.first.return_value = None
+        fake_models = unittest.mock.MagicMock(Task=unittest.mock.MagicMock(objects=manager))
+        with _mock_django_q_models(fake_models):
+            assert DjangoQ2CommandRunner().finalize_stale(execution) is None
+
+
+# ---------------------------------------------------------------------------
+# Signal delivery (host gating / PID-reuse guard)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestSignalWorker:
+    def _runner(self):
+        from django_admin_runner.runners.django_q2 import DjangoQ2CommandRunner
+
+        return DjangoQ2CommandRunner()
+
+    def test_signal_skipped_for_other_host(self, execution, monkeypatch):
+        """PIDs from another pod/container are meaningless here: no signal."""
+        sent: list = []
+        monkeypatch.setattr("os.kill", lambda pid, sig: sent.append((pid, sig)))
+        execution.worker_pid = 4242
+        execution.worker_host = "some-other-pod"
+        assert self._runner()._signal_worker(execution, signal.SIGKILL) is False
+        assert sent == []
+
+    def test_signal_sent_for_local_host_with_matching_start(self, execution, monkeypatch):
+        sent: list = []
+        monkeypatch.setattr("os.kill", lambda pid, sig: sent.append(pid))
+        worker_started = datetime(2026, 10, 6, 22, 18, 4, tzinfo=UTC)
+        monkeypatch.setattr("django_admin_runner.tasks._proc_starttime", lambda pid: worker_started)
+        execution.worker_pid = 25
+        execution.worker_host = socket.gethostname()
+        execution.worker_started_at = worker_started
+        assert self._runner()._signal_worker(execution, signal.SIGKILL) is True
+        assert sent == [25]
+
+    def test_signal_skipped_on_reused_pid(self, execution, monkeypatch):
+        """PID now held by an older process → reused, do not signal."""
+        sent: list = []
+        monkeypatch.setattr("os.kill", lambda pid, sig: sent.append(pid))
+        monkeypatch.setattr(
+            "django_admin_runner.tasks._proc_starttime",
+            lambda pid: datetime(2026, 10, 6, 20, 0, 0, tzinfo=UTC),
+        )
+        execution.worker_pid = 25
+        execution.worker_host = socket.gethostname()
+        execution.worker_started_at = datetime(2026, 10, 6, 22, 18, 4, tzinfo=UTC)
+        assert self._runner()._signal_worker(execution, signal.SIGKILL) is False
+        assert sent == []
+
 
 # ---------------------------------------------------------------------------
 # get_runner factory — django-q2
@@ -275,6 +364,27 @@ def _mock_django_q(**kwargs):
         sys.modules[key] = val
     try:
         yield mock_async
+    finally:
+        for key, orig in saved.items():
+            if orig is None:
+                del sys.modules[key]
+            else:
+                sys.modules[key] = orig
+
+
+@contextmanager
+def _mock_django_q_models(models_module):
+    """Context manager that installs a fake ``django_q.models`` module."""
+    mock_django_q = unittest.mock.MagicMock(models=models_module)
+    saved = {}
+    for key, val in [
+        ("django_q", mock_django_q),
+        ("django_q.models", models_module),
+    ]:
+        saved[key] = sys.modules.get(key)
+        sys.modules[key] = val
+    try:
+        yield
     finally:
         for key, orig in saved.items():
             if orig is None:

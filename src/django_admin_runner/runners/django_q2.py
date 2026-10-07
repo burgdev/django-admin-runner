@@ -27,21 +27,34 @@ class DjangoQ2CommandRunner(BaseCommandRunner):
     def _signal_worker(self, execution, sig: int) -> bool:
         """Send *sig* to the worker process running *execution*.
 
-        Guards against PID reuse: the signal is only sent when the target
-        process started at or after the execution's ``started_at`` (its
-        ``/proc/<pid>/stat`` starttime, converted via the boot time from
-        ``/proc/stat``). Best effort — on any read failure the check is
-        skipped and the signal is sent if the PID exists.
+        A pid is only meaningful inside its own PID namespace: when the
+        execution was recorded on another host (e.g. another pod in
+        Kubernetes), the signal is *not* sent — the cooperative stop flag
+        stays the only cross-host stop mechanism. Within the local
+        namespace, PID reuse is guarded by comparing the target process's
+        start time with the recorded worker start time (falling back to
+        the execution start for rows recorded before it existed).
+
+        Best effort — on any read failure the check is skipped and the
+        signal is sent if the PID exists locally.
         """
         import os
+        import socket
+
+        from django_admin_runner.tasks import _proc_starttime
 
         pid = execution.worker_pid
         if not pid:
             return False
 
-        if execution.started_at is not None:
-            started = self._proc_starttime(pid)
-            if started is not None and started < execution.started_at:
+        host = getattr(execution, "worker_host", "") or ""
+        if host and host != socket.gethostname():
+            return False  # another container/pod: the pid is meaningless here
+
+        reference = execution.worker_started_at or execution.started_at
+        if reference is not None:
+            started = _proc_starttime(pid)
+            if started is not None and started < reference:
                 return False  # PID predates the execution → reused
 
         try:
@@ -50,27 +63,13 @@ class DjangoQ2CommandRunner(BaseCommandRunner):
             return False
         return True
 
-    @staticmethod
-    def _proc_starttime(pid: int):
-        """Start time of *pid* as a timezone-aware datetime, or ``None``."""
-        try:
-            with open(f"/proc/{pid}/stat", "rb") as fh:
-                # Field 22 (starttime, 1-based) — after the comm field,
-                # which may contain spaces, so split after its ')'.
-                fields = fh.read().rsplit(b")", 1)[1].split()
-            starttime_ticks = int(fields[19])  # (22) minus the two consumed
-            with open("/proc/stat", "rb") as fh:
-                btime = next(int(line.split()[1]) for line in fh if line.startswith(b"btime"))
-        except (OSError, ValueError, IndexError, StopIteration):
-            return None
-        from django.utils import timezone
-
-        return timezone.datetime.fromtimestamp(
-            btime + starttime_ticks // 100, tz=timezone.get_current_timezone()
-        )
-
     def stop(self, execution) -> None:
-        """Graceful stop: stop flag (heartbeat) + SIGTERM to the worker PID."""
+        """Graceful stop: stop flag (heartbeat) + SIGTERM to the worker PID.
+
+        The signal only fires when the worker ran on this host (see
+        ``_signal_worker``); the cooperative stop flag set by
+        ``super().stop()`` is the cross-host mechanism.
+        """
         super().stop(execution)
         import signal
 
@@ -96,7 +95,9 @@ class DjangoQ2CommandRunner(BaseCommandRunner):
         try:
             from django_q.models import Task
 
-            task = Task.objects.filter(name=execution.task_id).first()
+            # ``task_id`` stores the django-q2 task *id* (a UUID), not the
+            # human-readable ``Task.name`` (a humanhash) — match on ``pk``.
+            task = Task.objects.filter(pk=execution.task_id).first() if execution.task_id else None
         except Exception:  # noqa: BLE001 - attribution must never break the sweep
             return None
         if task is None or task.success or not task.stopped:
@@ -140,11 +141,15 @@ class DjangoQ2CommandRunner(BaseCommandRunner):
         q_options = {}
         if timeout is not None:
             q_options["timeout"] = timeout
-        # Never retry admin-runner tasks: a force-killed worker leaves the
-        # task unacknowledged, and a retry would run the command twice
-        # (the PENDING→RUNNING idempotency guard in execute_command also
-        # backs this up). -1 = disable retries in django-q2.
-        q_options["retry"] = -1
+        # Ack failed tasks immediately so a failed/killed task is not
+        # redelivered after the broker's retry window. A *hard-killed*
+        # worker cannot ack anything — such tasks redeliver after
+        # Q_CLUSTER["retry"] — but the PENDING→RUNNING idempotency guard
+        # in execute_command turns any redelivery into a no-op. Per-task
+        # ``retry`` is deliberately not set: django-q2 drops unknown
+        # q_options keys silently, and the ORM broker locks deliveries
+        # with the global retry anyway (retry must exceed timeout).
+        q_options["ack_failure"] = True
 
         try:
             from django_q.tasks import async_task
@@ -155,6 +160,9 @@ class DjangoQ2CommandRunner(BaseCommandRunner):
                 command_name,
                 kwargs,
                 execution.pk,
+                # Readable audit rows in the backend's task list (the task
+                # *name* is a humanhash; the id stays in execution.task_id).
+                task_name=f"admin-runner:{execution.pk}",
                 **task_kwargs,
             )
         except Exception as exc:
